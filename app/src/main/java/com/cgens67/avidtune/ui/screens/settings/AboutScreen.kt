@@ -205,9 +205,8 @@ fun AboutScreen(
                 SocialCard(
                     links = listOf(
                         SocialLink(R.drawable.github,    "https://github.com/cgens67/AvidTune", R.string.social_github),
-                        SocialLink(R.drawable.telegram,  "https://t.me/avidtune_updates",       R.string.social_telegram),
-                        SocialLink(R.drawable.paypal,    "https://www.paypal.me/AvidTune",      R.string.social_paypal),
-                        SocialLink(R.drawable.resource_public, "https://avidtune.netlify.app/", R.string.social_web),
+                        SocialLink(R.drawable.telegram,  "https://t.me/avidtuneupdates",       R.string.social_telegram),
+                        SocialLink(R.drawable.resource_public, "https://avidtune.vercel.app/", R.string.social_web),
                     ),
                     onLinkClick = { uriHandler.openUri(it) },
                 )
@@ -342,7 +341,7 @@ private fun HeroCard(shimmerBrush: Brush) {
                     contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
                 )
                 VersionBadge(
-                    text = "#${BuildConfig.VERSION_CODE}",
+                    text = "${BuildConfig.VERSION_CODE}",
                     containerColor = MaterialTheme.colorScheme.secondaryContainer,
                     contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
                 )
