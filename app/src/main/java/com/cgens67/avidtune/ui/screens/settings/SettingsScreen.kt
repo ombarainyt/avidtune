@@ -294,7 +294,6 @@ fun SettingsScreen(
     var query by remember { mutableStateOf(TextFieldValue()) }
     val focusRequester = remember { FocusRequester() }
 
-    var showTranslateDialog by remember { mutableStateOf(false) }
     var showChangelogSheet by remember { mutableStateOf(false) }
     var showUpdateDialog by remember { mutableStateOf(false) }
 
@@ -384,7 +383,7 @@ fun SettingsScreen(
     }
 
     val quickActions = buildQuickActions(navController, resetSearch)
-    val integrationActions = buildIntegrationActions(navController, resetSearch, onTranslateClick = { showTranslateDialog = true })
+    val integrationActions = buildIntegrationActions(navController, resetSearch)
     val settingsGroups = buildSettingsGroups(navController, resetSearch, onChangelogClick = { showChangelogSheet = true })
     val internalItems = buildInternalItems(navController, resetSearch)
 
@@ -589,27 +588,6 @@ fun SettingsScreen(
         }
     }
 
-    // Dialogs at the end of Scaffold
-    val uriHandler = LocalUriHandler.current
-
-    if (showTranslateDialog) {
-        AlertDialog(
-            onDismissRequest = { showTranslateDialog = false },
-            title = { Text(stringResource(R.string.Redirección)) },
-            text = { Text(stringResource(R.string.poeditor_redirect)) },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        showTranslateDialog = false
-                        uriHandler.openUri("https://poeditor.com/join/project/208BwCVazA")
-                    }
-                ) {
-                    Text("OK")
-                }
-            }
-        )
-    }
-
     if (showChangelogSheet) {
         ModalBottomSheet(
             onDismissRequest = { showChangelogSheet = false },
@@ -734,7 +712,7 @@ private fun buildQuickActions(navController: NavController, resetSearch: () -> U
 }
 
 @Composable
-private fun buildIntegrationActions(navController: NavController, resetSearch: () -> Unit, onTranslateClick: () -> Unit): List<SettingsIntegrationAction> {
+private fun buildIntegrationActions(navController: NavController, resetSearch: () -> Unit): List<SettingsIntegrationAction> {
     val uriHandler = LocalUriHandler.current
     return listOf(
         SettingsIntegrationAction(
@@ -742,12 +720,6 @@ private fun buildIntegrationActions(navController: NavController, resetSearch: (
             label = "Discord",
             onClick = { resetSearch(); navController.navigate("settings/discord") },
             accentColor = Color(0xFF5865F2)
-        ),
-        SettingsIntegrationAction(
-            icon = painterResource(R.drawable.translate),
-            label = stringResource(R.string.Translate),
-            onClick = { resetSearch(); onTranslateClick() },
-            accentColor = MaterialTheme.colorScheme.primary
         ),
         SettingsIntegrationAction(
             icon = painterResource(R.drawable.github),
@@ -811,16 +783,10 @@ private fun buildSettingsGroups(
                     onClick = { resetSearch(); onChangelogClick() }
                 ),
                 SettingsItem(
-                    icon = painterResource(R.drawable.paypal),
-                    title = stringResource(R.string.Donate),
-                    keywords = listOf("donate", "paypal", "support"),
-                    onClick = { resetSearch(); uriHandler.openUri("https://www.paypal.com/paypalme/avidtune") }
-                ),
-                SettingsItem(
                     icon = painterResource(R.drawable.telegram),
                     title = stringResource(R.string.Telegramchanel),
                     keywords = listOf("telegram", "community", "channel"),
-                    onClick = { resetSearch(); uriHandler.openUri("https://t.me/avidtune_updates") }
+                    onClick = { resetSearch(); uriHandler.openUri("https://t.me/avidtuneupdates") }
                 )
             )
         )
