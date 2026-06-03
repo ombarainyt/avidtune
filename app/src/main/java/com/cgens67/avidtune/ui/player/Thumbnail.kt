@@ -103,7 +103,7 @@ fun Thumbnail(
 
     val currentMediaItem = playerConnection.player.currentMediaItem
     val mediaItems = listOfNotNull(previousMediaMetadata, currentMediaItem, nextMediaMetadata)
-    val currentMediaIndex = mediaItems.indexOf(currentMediaItem)
+    val currentMediaIndex = mediaItems.indexOf(currentMediaItem).coerceAtLeast(0)
 
     val snapProvider = remember(thumbnailLazyGridState) {
         SnapLayoutInfoProvider(
@@ -112,6 +112,29 @@ fun Thumbnail(
                 layoutSize / 2f - itemSize / 2f
             }
         )
+    }
+
+    // Fix 1: Ensure grid scrolls back to the current track when the song actually changes
+    LaunchedEffect(currentMediaItem) {
+        if (currentMediaIndex != -1) {
+            thumbnailLazyGridState.scrollToItem(currentMediaIndex)
+        }
+    }
+
+    // Fix 2: Detect when user has finished swiping to change the song
+    LaunchedEffect(thumbnailLazyGridState.isScrollInProgress) {
+        if (!thumbnailLazyGridState.isScrollInProgress) {
+            val visibleIndex = thumbnailLazyGridState.firstVisibleItemIndex
+            if (visibleIndex != currentMediaIndex && visibleIndex != -1) {
+                if (visibleIndex < currentMediaIndex && canSkipPrevious) {
+                    playerConnection.player.seekToPreviousMediaItem()
+                } else if (visibleIndex > currentMediaIndex && canSkipNext) {
+                    playerConnection.player.seekToNext()
+                }
+                // Reset scroll back so the next currentMediaItem trigger updates smoothly
+                thumbnailLazyGridState.scrollToItem(currentMediaIndex)
+            }
+        }
     }
 
     Box(modifier = modifier) {

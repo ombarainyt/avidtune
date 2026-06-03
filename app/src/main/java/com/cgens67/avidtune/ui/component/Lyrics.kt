@@ -156,6 +156,7 @@ import com.cgens67.avidtune.constants.PlayerBackgroundStyle
 import com.cgens67.avidtune.constants.PlayerBackgroundStyleKey
 import com.cgens67.avidtune.constants.SliderStyle
 import com.cgens67.avidtune.constants.SliderStyleKey
+import com.cgens67.avidtune.constants.SwipeThumbnailKey
 import com.cgens67.avidtune.db.entities.LyricsEntity
 import com.cgens67.avidtune.db.entities.LyricsEntity.Companion.LYRICS_NOT_FOUND
 import com.cgens67.avidtune.lyrics.LyricsEntry
@@ -213,6 +214,7 @@ fun Lyrics(
     val scrollLyrics by rememberPreference(LyricsScrollKey, true)
     val animateLyrics by rememberPreference(AnimateLyricsKey, true)
     val disableBlur by rememberPreference(DisableBlurKey, false)
+    val swipeThumbnail by rememberPreference(SwipeThumbnailKey, true)
 
     val currentMetadata = mediaMetadata ?: playerConnection.mediaMetadata.collectAsState().value
     val currentSongId = currentMetadata?.id
@@ -1184,7 +1186,8 @@ fun Lyrics(
                     Box(
                         modifier = Modifier
                             .weight(1f)
-                            .pointerInput(Unit) {
+                            .pointerInput(swipeThumbnail) {
+                                if (!swipeThumbnail) return@pointerInput
                                 detectHorizontalDragGestures(
                                     onDragStart = {
                                         dragStartTime = System.currentTimeMillis()
