@@ -637,5 +637,8 @@
     <string name="lyrics_provider_priority">Prioridad de proveedores de letras</string>
     <string name="lyrics_provider_priority_desc">Reordena la prioridad de los proveedores de letras</string>
     <string name="provider_priority">Prioridad de Proveedores</string>
+
+    <string name="use_system_font">Usar fuente del sistema</string>
+    <string name="use_system_font_desc">Usar la fuente del dispositivo en lugar de la fuente de la aplicación</string>
     
 </resources>

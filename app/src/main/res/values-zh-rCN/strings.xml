@@ -797,4 +797,7 @@
     <string name="about_app_desc_part1">"AvidTune 基本上是 "</string>
     <string name="about_app_desc_ganvo">Ganvo Music</string>
     <string name="about_app_desc_part2">" 的移动版，提供时尚、快捷且功能丰富的体验，让您随时随地畅享最爱的歌曲。在兼顾性能的同时，让您指尖轻触即可轻松访问所有 YouTube Music 歌曲。"</string>
+
+    <string name="use_system_font">使用系统字体</string>
+    <string name="use_system_font_desc">使用设备自带字体，而不是应用默认字体</string>
 </resources>

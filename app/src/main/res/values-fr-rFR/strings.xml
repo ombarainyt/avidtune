@@ -813,4 +813,7 @@
     <string name="about_app_desc_part1">"AvidTune est essentiellement une version mobile de "</string>
     <string name="about_app_desc_ganvo">Ganvo Music</string>
     <string name="about_app_desc_part2">", offrant une expérience élégante, rapide et riche en fonctionnalités pour profiter de vos chansons préférées lors de vos déplacements. Conçu en gardant les performances à l\'esprit, il vous permet d\'accéder facilement à toutes les chansons de YouTube Music du bout des doigts."</string>
+
+    <string name="use_system_font">Utiliser la police du système</string>
+    <string name="use_system_font_desc">Utiliser la police de l\'appareil au lieu de la police de l\'application</string>
 </resources>
