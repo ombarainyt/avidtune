@@ -617,7 +617,9 @@ private fun ReleaseCard(release: Release) {
 @Composable
 fun AdvancedMarkdownText(
     markdown: String,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    style: androidx.compose.ui.text.TextStyle = MaterialTheme.typography.bodyMedium,
+    color: Color = MaterialTheme.colorScheme.onSurface
 ) {
     val cleanedMarkdown = cleanMarkdown(markdown)
     val lines = cleanedMarkdown.lines()
@@ -721,7 +723,7 @@ fun AdvancedMarkdownText(
                         listItems.clear()
                         inList = false
                     }
-                    FormattedText(trimmedLine)
+                    FormattedText(trimmedLine, style = style, color = color)
                 }
             }
         }
