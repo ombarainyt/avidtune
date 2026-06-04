@@ -847,6 +847,9 @@
     <string name="insight_no_data">No data available for the year yet.</string>
     <string name="insight_intro_ready">Ready for your</string>
     <string name="insight_intro_ready_2">year in music?</string>
+    <string name="insight_intro_line1">This year, your world was filled with rhythm...</string>
+    <string name="insight_intro_line2">AVIDTUNE INSIGHT</string>
+    <string name="insight_intro_line3">And there was one voice you couldn\'t get enough of:</string>
     <string name="insight_top_artist_reveal">Your #1 Artist was...</string>
     <string name="insight_minutes_spent">You spent</string>
     <string name="insight_minutes">Minutes</string>
@@ -863,7 +866,7 @@
     <string name="insight_close">Close</string>
     <string name="insight_play">Play Top Songs</string>
     <string name="insight_share_text">Check out my AvidTune Insight!\n\nTop Artist: %1$s\nTotal Time: %2$d mins\nTop Song: %3$s</string>
-    
+
     <!-- Insight Time Comparisons -->
     <string name="insight_time_0">It looks like you haven\'t listened to any music yet. Let\'s find your first song!</string>
     <string name="insight_time_1_10">Just getting started! You\'re beginning your musical journey.</string>

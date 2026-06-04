@@ -15,7 +15,12 @@ import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
@@ -25,8 +30,9 @@ import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
-import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -36,6 +42,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.systemBarsPadding
@@ -58,6 +65,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameMillis
 import androidx.compose.ui.Alignment
@@ -68,16 +76,15 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.ColorFilter
+import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -262,7 +269,7 @@ fun InsightScreen(
             )
         }
         
-        // Play button bottom for music integration
+        // Play button bottom for music integration (repositioned above system gesture bar)
         if (currentPage > 1) {
             Button(
                 onClick = { 
@@ -275,7 +282,8 @@ fun InsightScreen(
                 },
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
-                    .padding(bottom = 32.dp),
+                    .navigationBarsPadding()
+                    .padding(bottom = 24.dp),
                 colors = ButtonDefaults.buttonColors(containerColor = Color.White, contentColor = Color.Black)
             ) {
                 Icon(painter = painterResource(R.drawable.play), contentDescription = null, modifier = Modifier.size(20.dp))
@@ -288,87 +296,179 @@ fun InsightScreen(
 
 @Composable
 fun IntroPage(topArtists: List<com.cgens67.avidtune.db.entities.Artist>, isActive: Boolean) {
-    var phase by remember { mutableIntStateOf(0) }
+    val topArtist = topArtists.firstOrNull()
+    var startAnimation by remember { mutableStateOf(false) }
     
     LaunchedEffect(isActive) {
         if (isActive) {
-            phase = 0
-            kotlinx.coroutines.delay(1000)
-            phase = 1
-            kotlinx.coroutines.delay(2000)
-            phase = 2
+            startAnimation = true
         } else {
-            phase = 0
+            startAnimation = false
         }
     }
+    
+    val infiniteTransition = rememberInfiniteTransition(label = "vinyl")
+    val rotation by infiniteTransition.animateFloat(
+        initialValue = 0f,
+        targetValue = 360f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(12000, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart
+        ),
+        label = "rotation"
+    )
 
-    // Meteor race animations
-    val raceProgress by animateFloatAsState(
-        targetValue = if (phase >= 1) 1f else 0f,
-        animationSpec = tween(2000, easing = FastOutSlowInEasing),
-        label = "race"
+    val introAlpha by animateFloatAsState(
+        targetValue = if (startAnimation) 1f else 0f,
+        animationSpec = tween(800, delayMillis = 200, easing = FastOutSlowInEasing),
+        label = "introAlpha"
+    )
+
+    val midTextAlpha by animateFloatAsState(
+        targetValue = if (startAnimation) 1f else 0f,
+        animationSpec = tween(800, delayMillis = 1400, easing = FastOutSlowInEasing),
+        label = "midTextAlpha"
+    )
+
+    val artistCardAlpha by animateFloatAsState(
+        targetValue = if (startAnimation) 1f else 0f,
+        animationSpec = tween(1000, delayMillis = 2400, easing = FastOutSlowInEasing),
+        label = "artistCardAlpha"
     )
     
-    val textMeasurer = rememberTextMeasurer()
+    val artistCardScale by animateFloatAsState(
+        targetValue = if (startAnimation) 1f else 0.6f,
+        animationSpec = spring(dampingRatio = 0.65f, stiffness = Spring.StiffnessLow),
+        label = "artistCardScale"
+    )
 
-    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-        AnimatedVisibility(visible = phase == 0, enter = fadeIn(), exit = fadeOut()) {
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Text(stringResource(R.string.insight_intro_ready), fontSize = 32.sp, color = Color.White, fontWeight = FontWeight.Bold)
-                Text(stringResource(R.string.insight_intro_ready_2), fontSize = 32.sp, color = Color.White, fontWeight = FontWeight.Bold)
-            }
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(24.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center
+    ) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            modifier = Modifier.graphicsLayer { alpha = introAlpha }
+        ) {
+            Icon(
+                painter = painterResource(R.drawable.auto_awesome),
+                contentDescription = null,
+                tint = Color.Yellow,
+                modifier = Modifier.size(36.dp)
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                text = stringResource(R.string.insight_intro_line2),
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                color = Color.White.copy(alpha = 0.7f),
+                letterSpacing = 2.sp
+            )
         }
-        
-        if (phase >= 1 && phase < 2) {
-            Canvas(modifier = Modifier.fillMaxSize()) {
-                val width = size.width
-                val height = size.height
-                
-                topArtists.take(5).forEachIndexed { index, artist ->
-                    val speed = 1f - (index * 0.15f) 
-                    val startX = -300f
-                    val endX = width + 300f
-                    
-                    val currentX = lerp(startX, endX, raceProgress * speed)
-                    val currentY = (height / 6f) * (index + 1)
-                    
-                    drawLine(
-                        color = Color.White.copy(alpha = 0.5f),
-                        start = Offset(currentX - 150f, currentY),
-                        end = Offset(currentX, currentY),
-                        strokeWidth = 8f,
-                        cap = StrokeCap.Round
+
+        Spacer(modifier = Modifier.height(48.dp))
+
+        Box(
+            contentAlignment = Alignment.Center,
+            modifier = Modifier
+                .graphicsLayer {
+                    alpha = artistCardAlpha
+                    scaleX = artistCardScale
+                    scaleY = artistCardScale
+                }
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(230.dp)
+                    .shadow(24.dp, CircleShape, clip = false)
+                    .background(Color.Black.copy(alpha = 0.3f), CircleShape)
+            )
+            
+            Box(
+                modifier = Modifier
+                    .size(220.dp)
+                    .graphicsLayer { rotationZ = rotation }
+                    .clip(CircleShape)
+                    .border(4.dp, Color.White.copy(alpha = 0.2f), CircleShape)
+            ) {
+                if (topArtist?.artist?.thumbnailUrl != null) {
+                    AsyncImage(
+                        model = topArtist.artist.thumbnailUrl,
+                        contentDescription = null,
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier.fillMaxSize()
                     )
-                    drawCircle(
-                        color = Color.Yellow,
-                        radius = 15f,
-                        center = Offset(currentX, currentY)
-                    )
-                    
-                    drawText(
-                        textMeasurer = textMeasurer,
-                        text = artist.artist.name,
-                        topLeft = Offset(currentX + 25f, currentY - 20f),
-                        style = androidx.compose.ui.text.TextStyle(
-                            color = Color.White,
-                            fontSize = 18.sp,
-                            fontWeight = FontWeight.Bold
-                        )
+                } else {
+                    Image(
+                        painter = painterResource(R.drawable.person),
+                        contentDescription = null,
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .background(MaterialTheme.colorScheme.surfaceVariant)
+                            .padding(24.dp),
+                        colorFilter = ColorFilter.tint(Color.White.copy(alpha = 0.6f))
                     )
                 }
+                
+                Box(
+                    modifier = Modifier
+                        .size(40.dp)
+                        .clip(CircleShape)
+                        .background(Color.Black)
+                        .border(3.dp, Color.White.copy(alpha = 0.5f), CircleShape)
+                        .align(Alignment.Center)
+                )
             }
         }
-        
-        AnimatedVisibility(
-            visible = phase == 2, 
-            enter = fadeIn(tween(500)) + scaleIn(initialScale = 0.5f, animationSpec = spring(dampingRatio = 0.6f)), 
-            exit = fadeOut()
+
+        Spacer(modifier = Modifier.height(48.dp))
+
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            modifier = Modifier.fillMaxWidth()
         ) {
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Text(stringResource(R.string.insight_top_artist_reveal), fontSize = 24.sp, color = Color.White.copy(alpha = 0.8f))
-                Spacer(Modifier.height(16.dp))
-                Text(topArtists.firstOrNull()?.artist?.name ?: "N/A", fontSize = 48.sp, color = Color.White, fontWeight = FontWeight.Black, textAlign = TextAlign.Center)
-            }
+            Text(
+                text = stringResource(R.string.insight_intro_line1),
+                style = MaterialTheme.typography.bodyLarge,
+                color = Color.White.copy(alpha = 0.8f),
+                textAlign = TextAlign.Center,
+                modifier = Modifier.graphicsLayer { alpha = introAlpha }
+            )
+            
+            Spacer(modifier = Modifier.height(12.dp))
+            
+            Text(
+                text = stringResource(R.string.insight_intro_line3),
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Medium,
+                color = Color.White.copy(alpha = 0.9f),
+                textAlign = TextAlign.Center,
+                modifier = Modifier.graphicsLayer { alpha = midTextAlpha }
+            )
+            
+            Spacer(modifier = Modifier.height(24.dp))
+            
+            Text(
+                text = topArtist?.artist?.name ?: "N/A",
+                style = MaterialTheme.typography.headlineLarge.copy(
+                    fontSize = 40.sp,
+                    fontWeight = FontWeight.Black,
+                    shadow = Shadow(
+                        color = Color.Black.copy(alpha = 0.5f),
+                        offset = Offset(0f, 4f),
+                        blurRadius = 8f
+                    )
+                ),
+                color = Color.White,
+                textAlign = TextAlign.Center,
+                modifier = Modifier
+                    .graphicsLayer { alpha = artistCardAlpha }
+                    .padding(horizontal = 16.dp)
+            )
         }
     }
 }
