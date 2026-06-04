@@ -281,7 +281,7 @@ fun Lyrics(
         }
     }
 
-    val lines = remember(originalLyrics, scope) {
+    val rawLines = remember(originalLyrics, scope) {
         if (originalLyrics == null || originalLyrics == LYRICS_NOT_FOUND) {
             emptyList()
         } else if (originalLyrics.startsWith("[")) {
@@ -294,19 +294,54 @@ fun Lyrics(
         }
     }
 
+    val lines = remember(rawLines) {
+        val newLines = mutableListOf<LyricsEntry>()
+        for (i in 0 until rawLines.size) {
+            val current = rawLines[i]
+            newLines.add(current)
+            if (i < rawLines.size - 1) {
+                val next = rawLines[i + 1]
+                val gap = next.time - current.time
+                // Si la brecha instrumental es grande y hay tiempo, agregamos indicador de instrumental
+                if (gap > 15000 && current.text.isNotBlank() && next.text.isNotBlank()) {
+                    newLines.add(
+                        LyricsEntry(
+                            time = current.time + 3000, 
+                            text = "♪",
+                            agent = "instrumental_gap",
+                            isBackground = false
+                        )
+                    )
+                }
+            }
+        }
+        newLines
+    }
+
     var translatedLines by remember(currentSongId) { mutableStateOf<List<LyricsEntry>?>(null) }
     var showTranslated by remember(currentSongId) { mutableStateOf(false) }
     var showTranslatePrompt by remember(currentSongId) { mutableStateOf(false) }
     var translationPromptText by remember(currentSongId) { mutableStateOf("") }
     var isTranslating by remember(currentSongId) { mutableStateOf(false) }
 
-    val displayedLines = if (showTranslated && translatedLines != null) translatedLines!! else lines
+    var romanizedLines by remember(currentSongId) { mutableStateOf<List<LyricsEntry>?>(null) }
+    var showRomanized by remember(currentSongId) { mutableStateOf(false) }
+    var isRomanizing by remember(currentSongId) { mutableStateOf(false) }
+
+    val displayedLines = if (showTranslated && translatedLines != null) {
+        translatedLines!!
+    } else if (showRomanized && romanizedLines != null) {
+        romanizedLines!!
+    } else {
+        lines
+    }
 
     val toggleTranslation = {
         if (showTranslated) {
             showTranslated = false
         } else if (translatedLines != null) {
             showTranslated = true
+            showRomanized = false
             showTranslatePrompt = false
         } else {
             scope.launch {
@@ -317,7 +352,7 @@ fun Lyrics(
                 
                 val itemsToTranslate = mutableListOf<String>()
                 lines.forEach { entry ->
-                    if (entry.text.isNotBlank()) {
+                    if (entry.text.isNotBlank() && entry.agent != "instrumental_gap") {
                         itemsToTranslate.add(entry.text)
                         if (isZhConversion && entry.words != null) {
                             entry.words.forEach { word ->
@@ -337,7 +372,7 @@ fun Lyrics(
                     var transIdx = 0
                     for (i in newEntries.indices) {
                         val entry = newEntries[i]
-                        if (entry.text.isNotBlank()) {
+                        if (entry.text.isNotBlank() && entry.agent != "instrumental_gap") {
                             val newLineText = translatedSplit.getOrElse(transIdx++) { entry.text }
                             
                             val newWords = if (isZhConversion && entry.words != null) {
@@ -350,18 +385,62 @@ fun Lyrics(
                             }
                             
                             newEntries[i] = entry.copy(text = newLineText, words = newWords)
-                        } else {
-                            newEntries[i] = entry.copy(words = null)
                         }
                     }
                     
                     translatedLines = newEntries
                     showTranslated = true
+                    showRomanized = false
                 } else {
                     Toast.makeText(context, R.string.translation_failed, Toast.LENGTH_SHORT).show()
                 }
                 
                 isTranslating = false
+            }
+        }
+    }
+
+    val toggleRomanization = {
+        if (showRomanized) {
+            showRomanized = false
+        } else if (romanizedLines != null) {
+            showRomanized = true
+            showTranslated = false
+        } else {
+            scope.launch {
+                isRomanizing = true
+                
+                val itemsToRomanize = mutableListOf<String>()
+                lines.forEach { entry ->
+                    if (entry.text.isNotBlank() && entry.agent != "instrumental_gap") {
+                        itemsToRomanize.add(entry.text)
+                    }
+                }
+                
+                val textToRomanize = itemsToRomanize.joinToString("\n")
+                val romanizedText = com.cgens67.avidtune.utils.TranslationHelper.romanize(textToRomanize)
+                
+                if (romanizedText != null) {
+                    val romanizedSplit = romanizedText.split("\n")
+                    val newEntries = lines.toMutableList()
+                    
+                    var transIdx = 0
+                    for (i in newEntries.indices) {
+                        val entry = newEntries[i]
+                        if (entry.text.isNotBlank() && entry.agent != "instrumental_gap") {
+                            val newLineText = romanizedSplit.getOrElse(transIdx++) { entry.text }
+                            newEntries[i] = entry.copy(text = newLineText, words = null)
+                        }
+                    }
+                    
+                    romanizedLines = newEntries
+                    showRomanized = true
+                    showTranslated = false
+                } else {
+                    Toast.makeText(context, R.string.translation_failed, Toast.LENGTH_SHORT).show()
+                }
+                
+                isRomanizing = false
             }
         }
     }
@@ -467,7 +546,6 @@ fun Lyrics(
 
                         val text = existingLyrics.lyrics.trim()
                         if (!text.startsWith("[provider:")) {
-                            // Old format, trigger a background upgrade
                             scope.launch(Dispatchers.IO) {
                                 try {
                                     val entryPoint = EntryPointAccessors.fromApplication(
@@ -489,7 +567,6 @@ fun Lyrics(
                                             }
                                         } catch (e: Throwable) {}
 
-                                        // Update state to show provider credit
                                         currentLyricsEntity = upgradedEntity
                                         val upgradedCache = lyricsCache.toMutableMap().apply {
                                             put(songId, upgradedEntity)
@@ -497,7 +574,6 @@ fun Lyrics(
                                         lyricsCache = upgradedCache
                                     }
                                 } catch (e: Throwable) {
-                                    // Ignore errors during background upgrade
                                 }
                             }
                         }
@@ -566,7 +642,7 @@ fun Lyrics(
         isAutoScrollEnabled = true
 
         if (lines.isNotEmpty() && originalLyrics != LYRICS_NOT_FOUND) {
-            val textOnly = lines.mapNotNull { it.text }.filter { it.isNotBlank() }.joinToString("\n").take(500)
+            val textOnly = lines.mapNotNull { it.text }.filter { it.isNotBlank() && it != "♪" }.joinToString("\n").take(500)
             if (textOnly.isNotBlank()) {
                 val detectedLang = com.cgens67.avidtune.utils.TranslationHelper.detectLanguage(textOnly)
                 val systemLocale = java.util.Locale.getDefault()
@@ -696,7 +772,6 @@ fun Lyrics(
             currentLineIndex = rawIndex
 
             var mainIdx = rawIndex
-            // Navigate back to find the closest main line (ignoring background lines)
             while (mainIdx >= 0 && lines.getOrNull(mainIdx)?.isBackground == true) {
                 mainIdx--
             }
@@ -1035,7 +1110,7 @@ fun Lyrics(
                                 }
                             }
 
-                            if (isTranslating) {
+                            if (isTranslating || isRomanizing) {
                                 item(key = "translating_indicator") {
                                     Box(
                                         modifier = Modifier.fillMaxWidth().padding(32.dp),
@@ -1061,6 +1136,8 @@ fun Lyrics(
 
                                 val isActiveLine = (index == displayedCurrentMainLineIndex || isAssociatedBg) && isSynced
                                 val distance = if (isActiveLine) 0 else kotlin.math.abs(index - displayedCurrentMainLineIndex)
+
+                                val nextLineTime = displayedLines.getOrNull(index + 1)?.time ?: duration
 
                                 LyricsLine(
                                     entry = item,
@@ -1108,6 +1185,7 @@ fun Lyrics(
                                     isAutoScrollActive = isAutoScrollEnabled,
                                     animateLyrics = animateLyrics,
                                     lyricsOffset = lyricsOffsetMs,
+                                    nextLineTime = nextLineTime,
                                     modifier = Modifier
                                 )
                             }
@@ -1433,7 +1511,9 @@ fun Lyrics(
                                                 mediaMetadata = metadata,
                                                 onDismiss = menuState::dismiss,
                                                 isTranslated = showTranslated,
-                                                onTranslateClick = { toggleTranslation() }
+                                                onTranslateClick = { toggleTranslation() },
+                                                isRomanized = showRomanized,
+                                                onRomanizeClick = { toggleRomanization() }
                                             )
                                         }
                                     }

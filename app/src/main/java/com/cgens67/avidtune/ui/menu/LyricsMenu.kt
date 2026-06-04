@@ -77,6 +77,8 @@ fun LyricsMenu(
     viewModel: LyricsMenuViewModel = hiltViewModel(),
     isTranslated: Boolean = false,
     onTranslateClick: () -> Unit = {},
+    isRomanized: Boolean = false,
+    onRomanizeClick: () -> Unit = {},
 ) {
     val context = LocalContext.current
     val database = LocalDatabase.current
@@ -127,6 +129,10 @@ fun LyricsMenu(
                         IconButton(onClick = { syncOffsetValue = (syncOffsetValue + 50f).coerceAtMost(5000f) }) {
                             Icon(painterResource(R.drawable.add), contentDescription = "+")
                         }
+                    }
+                    Spacer(Modifier.height(8.dp))
+                    TextButton(onClick = { syncOffsetValue = 0f }) {
+                        Text(stringResource(R.string.reset))
                     }
                     Spacer(Modifier.height(8.dp))
                     Text(
@@ -518,6 +524,21 @@ fun LyricsMenu(
                         text = stringResource(if (isTranslated) R.string.show_original else R.string.Translate),
                         onClick = { 
                             onTranslateClick()
+                            onDismiss()
+                        }
+                    ),
+                    NewAction(
+                        icon = {
+                            Icon(
+                                painter = painterResource(R.drawable.lyrics),
+                                contentDescription = null,
+                                modifier = Modifier.size(28.dp),
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        },
+                        text = if (isRomanized) "Original" else "Romanize",
+                        onClick = {
+                            onRomanizeClick()
                             onDismiss()
                         }
                     )
