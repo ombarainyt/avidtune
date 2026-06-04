@@ -58,23 +58,39 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.systemBars
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material3.BasicAlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.CircularWavyProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Slider
+import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -96,10 +112,15 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.CompositingStrategy
+import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.graphics.drawscope.scale
@@ -142,11 +163,16 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.media3.common.C
 import androidx.media3.common.Player
+import androidx.palette.graphics.Palette
+import coil.ImageLoader
 import coil.compose.AsyncImage
+import coil.compose.rememberAsyncImagePainter
+import coil.request.ImageRequest
 import com.cgens67.avidtune.LocalDatabase
 import com.cgens67.avidtune.LocalPlayerConnection
 import com.cgens67.avidtune.R
 import com.cgens67.avidtune.constants.AnimateLyricsKey
+import com.cgens67.avidtune.constants.AppleMusicLyricsBlurKey
 import com.cgens67.avidtune.constants.DarkModeKey
 import com.cgens67.avidtune.constants.DisableBlurKey
 import com.cgens67.avidtune.constants.LyricsClickKey
@@ -163,10 +189,12 @@ import com.cgens67.avidtune.lyrics.LyricsEntry
 import com.cgens67.avidtune.lyrics.LyricsResult
 import com.cgens67.avidtune.lyrics.LyricsUtils.findCurrentLineIndex
 import com.cgens67.avidtune.lyrics.LyricsUtils.parseLyrics
+import com.cgens67.avidtune.playback.PlayerConnection
 import com.cgens67.avidtune.ui.menu.LyricsMenu
 import com.cgens67.avidtune.ui.screens.settings.DarkMode
 import com.cgens67.avidtune.ui.screens.settings.LyricsPosition
 import com.cgens67.avidtune.ui.utils.fadingEdge
+import com.cgens67.avidtune.utils.ComposeToImage
 import com.cgens67.avidtune.utils.makeTimeString
 import com.cgens67.avidtune.utils.rememberEnumPreference
 import com.cgens67.avidtune.utils.rememberPreference
@@ -179,8 +207,21 @@ import kotlinx.coroutines.withContext
 import me.saket.squiggles.SquigglySlider
 import kotlin.math.absoluteValue
 import kotlin.math.exp
+import kotlin.math.min
 import kotlin.math.roundToInt
 import kotlin.time.Duration.Companion.seconds
+import androidx.compose.ui.unit.Density
+import androidx.compose.ui.unit.TextUnit
+import androidx.core.graphics.drawable.toBitmap
+import android.text.Layout
+import android.text.StaticLayout
+import android.text.TextPaint
+import android.graphics.Typeface
+import android.graphics.Rect
+import android.graphics.RectF
+import android.graphics.Shader
+import android.graphics.LinearGradient
+import android.graphics.Paint
 
 @RequiresApi(Build.VERSION_CODES.M)
 @OptIn(ExperimentalFoundationApi::class, ExperimentalMaterial3Api::class,
@@ -281,7 +322,7 @@ fun Lyrics(
         }
     }
 
-    val rawLines = remember(originalLyrics, scope) {
+    val lines = remember(originalLyrics, scope) {
         if (originalLyrics == null || originalLyrics == LYRICS_NOT_FOUND) {
             emptyList()
         } else if (originalLyrics.startsWith("[")) {
@@ -294,54 +335,22 @@ fun Lyrics(
         }
     }
 
-    val lines = remember(rawLines) {
-        val newLines = mutableListOf<LyricsEntry>()
-        for (i in 0 until rawLines.size) {
-            val current = rawLines[i]
-            newLines.add(current)
-            if (i < rawLines.size - 1) {
-                val next = rawLines[i + 1]
-                val gap = next.time - current.time
-                // Si la brecha instrumental es grande y hay tiempo, agregamos indicador de instrumental
-                if (gap > 15000 && current.text.isNotBlank() && next.text.isNotBlank()) {
-                    newLines.add(
-                        LyricsEntry(
-                            time = current.time + 3000, 
-                            text = "♪",
-                            agent = "instrumental_gap",
-                            isBackground = false
-                        )
-                    )
-                }
-            }
-        }
-        newLines
-    }
-
     var translatedLines by remember(currentSongId) { mutableStateOf<List<LyricsEntry>?>(null) }
     var showTranslated by remember(currentSongId) { mutableStateOf(false) }
     var showTranslatePrompt by remember(currentSongId) { mutableStateOf(false) }
     var translationPromptText by remember(currentSongId) { mutableStateOf("") }
     var isTranslating by remember(currentSongId) { mutableStateOf(false) }
-
-    var romanizedLines by remember(currentSongId) { mutableStateOf<List<LyricsEntry>?>(null) }
+    
     var showRomanized by remember(currentSongId) { mutableStateOf(false) }
-    var isRomanizing by remember(currentSongId) { mutableStateOf(false) }
+    var romanizedLines by remember(currentSongId) { mutableStateOf<List<String>?>(null) }
 
-    val displayedLines = if (showTranslated && translatedLines != null) {
-        translatedLines!!
-    } else if (showRomanized && romanizedLines != null) {
-        romanizedLines!!
-    } else {
-        lines
-    }
+    val displayedLines = if (showTranslated && translatedLines != null) translatedLines!! else lines
 
     val toggleTranslation = {
         if (showTranslated) {
             showTranslated = false
         } else if (translatedLines != null) {
             showTranslated = true
-            showRomanized = false
             showTranslatePrompt = false
         } else {
             scope.launch {
@@ -352,8 +361,13 @@ fun Lyrics(
                 
                 val itemsToTranslate = mutableListOf<String>()
                 lines.forEach { entry ->
-                    if (entry.text.isNotBlank() && entry.agent != "instrumental_gap") {
+                    if (entry.text.isNotBlank()) {
                         itemsToTranslate.add(entry.text)
+                        if (isZhConversion && entry.words != null) {
+                            entry.words.forEach { word ->
+                                itemsToTranslate.add(word.text)
+                            }
+                        }
                     }
                 }
                 
@@ -367,15 +381,26 @@ fun Lyrics(
                     var transIdx = 0
                     for (i in newEntries.indices) {
                         val entry = newEntries[i]
-                        if (entry.text.isNotBlank() && entry.agent != "instrumental_gap") {
-                            val secondary = translatedSplit.getOrElse(transIdx++) { entry.text }
-                            newEntries[i] = entry.copy(secondaryText = secondary)
+                        if (entry.text.isNotBlank()) {
+                            val newLineText = translatedSplit.getOrElse(transIdx++) { entry.text }
+                            
+                            val newWords = if (isZhConversion && entry.words != null) {
+                                entry.words.map { word ->
+                                    val newWordText = translatedSplit.getOrElse(transIdx++) { word.text }
+                                    word.copy(text = newWordText)
+                                }
+                            } else {
+                                null
+                            }
+                            
+                            newEntries[i] = entry.copy(text = newLineText, words = newWords)
+                        } else {
+                            newEntries[i] = entry.copy(words = null)
                         }
                     }
                     
                     translatedLines = newEntries
                     showTranslated = true
-                    showRomanized = false
                 } else {
                     Toast.makeText(context, R.string.translation_failed, Toast.LENGTH_SHORT).show()
                 }
@@ -390,42 +415,34 @@ fun Lyrics(
             showRomanized = false
         } else if (romanizedLines != null) {
             showRomanized = true
-            showTranslated = false
         } else {
             scope.launch {
-                isRomanizing = true
-                
                 val itemsToRomanize = mutableListOf<String>()
                 lines.forEach { entry ->
-                    if (entry.text.isNotBlank() && entry.agent != "instrumental_gap") {
+                    if (entry.text.isNotBlank()) {
                         itemsToRomanize.add(entry.text)
                     }
                 }
-                
+
                 val textToRomanize = itemsToRomanize.joinToString("\n")
                 val romanizedText = com.cgens67.avidtune.utils.TranslationHelper.romanize(textToRomanize)
-                
+
                 if (romanizedText != null) {
                     val romanizedSplit = romanizedText.split("\n")
-                    val newEntries = lines.toMutableList()
-                    
-                    var transIdx = 0
-                    for (i in newEntries.indices) {
-                        val entry = newEntries[i]
-                        if (entry.text.isNotBlank() && entry.agent != "instrumental_gap") {
-                            val secondary = romanizedSplit.getOrElse(transIdx++) { entry.text }
-                            newEntries[i] = entry.copy(secondaryText = secondary)
+                    val finalRomanizedLines = mutableListOf<String>()
+                    var romIdx = 0
+                    for (entry in lines) {
+                        if (entry.text.isNotBlank()) {
+                            finalRomanizedLines.add(romanizedSplit.getOrElse(romIdx++) { "" })
+                        } else {
+                            finalRomanizedLines.add("")
                         }
                     }
-                    
-                    romanizedLines = newEntries
+                    romanizedLines = finalRomanizedLines
                     showRomanized = true
-                    showTranslated = false
                 } else {
                     Toast.makeText(context, R.string.translation_failed, Toast.LENGTH_SHORT).show()
                 }
-                
-                isRomanizing = false
             }
         }
     }
@@ -531,6 +548,7 @@ fun Lyrics(
 
                         val text = existingLyrics.lyrics.trim()
                         if (!text.startsWith("[provider:")) {
+                            // Old format, trigger a background upgrade
                             scope.launch(Dispatchers.IO) {
                                 try {
                                     val entryPoint = EntryPointAccessors.fromApplication(
@@ -552,6 +570,7 @@ fun Lyrics(
                                             }
                                         } catch (e: Throwable) {}
 
+                                        // Update state to show provider credit
                                         currentLyricsEntity = upgradedEntity
                                         val upgradedCache = lyricsCache.toMutableMap().apply {
                                             put(songId, upgradedEntity)
@@ -559,6 +578,7 @@ fun Lyrics(
                                         lyricsCache = upgradedCache
                                     }
                                 } catch (e: Throwable) {
+                                    // Ignore errors during background upgrade
                                 }
                             }
                         }
@@ -627,7 +647,7 @@ fun Lyrics(
         isAutoScrollEnabled = true
 
         if (lines.isNotEmpty() && originalLyrics != LYRICS_NOT_FOUND) {
-            val textOnly = lines.mapNotNull { it.text }.filter { it.isNotBlank() && it != "♪" }.joinToString("\n").take(500)
+            val textOnly = lines.mapNotNull { it.text }.filter { it.isNotBlank() }.joinToString("\n").take(500)
             if (textOnly.isNotBlank()) {
                 val detectedLang = com.cgens67.avidtune.utils.TranslationHelper.detectLanguage(textOnly)
                 val systemLocale = java.util.Locale.getDefault()
@@ -1017,7 +1037,7 @@ fun Lyrics(
                                         horizontalAlignment = Alignment.CenterHorizontally,
                                         verticalArrangement = Arrangement.spacedBy(16.dp)
                                     ) {
-                                        androidx.compose.material3.LoadingIndicator(
+                                        androidx.compose.material3.CircularProgressIndicator(
                                             color = expressiveAccent
                                         )
                                         Text(
@@ -1096,13 +1116,13 @@ fun Lyrics(
                                 }
                             }
 
-                            if (isTranslating || isRomanizing) {
+                            if (isTranslating) {
                                 item(key = "translating_indicator") {
                                     Box(
                                         modifier = Modifier.fillMaxWidth().padding(32.dp),
                                         contentAlignment = Alignment.Center
                                     ) {
-                                        androidx.compose.material3.LoadingIndicator(
+                                        androidx.compose.material3.CircularProgressIndicator(
                                             color = expressiveAccent
                                         )
                                     }
@@ -1123,10 +1143,11 @@ fun Lyrics(
                                 val isActiveLine = (index == displayedCurrentMainLineIndex || isAssociatedBg) && isSynced
                                 val distance = if (isActiveLine) 0 else kotlin.math.abs(index - displayedCurrentMainLineIndex)
 
-                                val nextLineTime = displayedLines.getOrNull(index + 1)?.time ?: duration
+                                val romText = if (showRomanized) romanizedLines?.getOrNull(index) else null
 
                                 LyricsLine(
                                     entry = item,
+                                    romanizedText = romText,
                                     isSynced = isSynced,
                                     isActive = isActiveLine,
                                     distanceFromCurrent = distance,
@@ -1171,9 +1192,24 @@ fun Lyrics(
                                     isAutoScrollActive = isAutoScrollEnabled,
                                     animateLyrics = animateLyrics,
                                     lyricsOffset = lyricsOffsetMs,
-                                    nextLineTime = nextLineTime,
                                     modifier = Modifier
                                 )
+
+                                val nextItem = displayedLines.getOrNull(index + 1)
+                                if (isSynced && nextItem != null && !item.isBackground && !nextItem.isBackground) {
+                                    val itemEnd = item.words?.maxOfOrNull { (it.endTime * 1000).toLong() } ?: (item.time + 3000L)
+                                    val gapDuration = nextItem.time - itemEnd
+
+                                    if (gapDuration > 15000L) {
+                                        GapIndicator(
+                                            gapStart = itemEnd,
+                                            gapEnd = nextItem.time,
+                                            playerConnection = playerConnection,
+                                            lyricsOffset = lyricsOffsetMs,
+                                            color = expressiveAccent
+                                        )
+                                    }
+                                }
                             }
                             
                             if (originalLyrics != LYRICS_NOT_FOUND && !lyricsProviderName.isNullOrBlank()) {
@@ -1763,6 +1799,58 @@ fun Lyrics(
                 shareDialogData = null
             }
         )
+    }
+}
+
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
+@Composable
+fun GapIndicator(
+    gapStart: Long,
+    gapEnd: Long,
+    playerConnection: PlayerConnection,
+    lyricsOffset: Long,
+    color: Color
+) {
+    var smoothPosition by remember { mutableLongStateOf(gapStart) }
+
+    LaunchedEffect(Unit) {
+        var lastPlayerPos = playerConnection.player.currentPosition
+        var lastUpdateTime = System.currentTimeMillis()
+        while (isActive) {
+            withFrameMillis {
+                val now = System.currentTimeMillis()
+                val playerPos = playerConnection.player.currentPosition
+                if (playerPos != lastPlayerPos) {
+                    lastPlayerPos = playerPos
+                    lastUpdateTime = now
+                }
+                val elapsed = now - lastUpdateTime
+                smoothPosition = lastPlayerPos + lyricsOffset + (if (playerConnection.player.isPlaying) elapsed else 0)
+            }
+        }
+    }
+
+    val progress = ((smoothPosition - gapStart).toFloat() / (gapEnd - gapStart)).coerceIn(0f, 1f)
+    val isVisible = smoothPosition in gapStart..(gapEnd - 1000L)
+
+    AnimatedVisibility(
+        visible = isVisible,
+        enter = fadeIn(tween(500)),
+        exit = fadeOut(tween(500))
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 32.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            androidx.compose.material3.CircularWavyProgressIndicator(
+                progress = { progress },
+                color = color,
+                trackColor = color.copy(alpha = 0.2f),
+                modifier = Modifier.size(40.dp)
+            )
+        }
     }
 }
 

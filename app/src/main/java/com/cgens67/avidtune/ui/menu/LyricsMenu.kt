@@ -131,10 +131,6 @@ fun LyricsMenu(
                         }
                     }
                     Spacer(Modifier.height(8.dp))
-                    TextButton(onClick = { syncOffsetValue = 0f }) {
-                        Text(stringResource(R.string.reset))
-                    }
-                    Spacer(Modifier.height(8.dp))
                     Text(
                         text = stringResource(R.string.sync_offset_description),
                         style = MaterialTheme.typography.bodySmall,
@@ -171,8 +167,13 @@ fun LyricsMenu(
                 }
             },
             dismissButton = {
-                TextButton(onClick = { showOffsetDialog = false }) {
-                    Text(stringResource(android.R.string.cancel))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    TextButton(onClick = { syncOffsetValue = 0f }) {
+                        Text(stringResource(R.string.reset))
+                    }
+                    TextButton(onClick = { showOffsetDialog = false }) {
+                        Text(stringResource(android.R.string.cancel))
+                    }
                 }
             }
         )
@@ -530,14 +531,14 @@ fun LyricsMenu(
                     NewAction(
                         icon = {
                             Icon(
-                                painter = painterResource(R.drawable.format_align_left),
+                                painter = painterResource(R.drawable.translate), // Or text format icon if available
                                 contentDescription = null,
                                 modifier = Modifier.size(28.dp),
                                 tint = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         },
-                        text = if (isRomanized) "Original" else "Romanize",
-                        onClick = {
+                        text = if (isRomanized) "Hide Romanized" else "Romanize",
+                        onClick = { 
                             onRomanizeClick()
                             onDismiss()
                         }
