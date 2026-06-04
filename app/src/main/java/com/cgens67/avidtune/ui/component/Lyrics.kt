@@ -89,8 +89,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.withFrameNanos
-import androidx.compose.runtime.withFrameMillis
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -181,6 +179,8 @@ import kotlin.math.absoluteValue
 import kotlin.math.exp
 import kotlin.math.roundToInt
 import kotlin.time.Duration.Companion.seconds
+
+enum class DualLyricsMode { NONE, TRANSLATED, ROMANIZED }
 
 @RequiresApi(Build.VERSION_CODES.M)
 @OptIn(ExperimentalFoundationApi::class, ExperimentalMaterial3Api::class,
@@ -302,7 +302,6 @@ fun Lyrics(
             if (i < rawLines.size - 1) {
                 val next = rawLines[i + 1]
                 val gap = next.time - current.time
-                // Si la brecha instrumental es grande y hay tiempo, agregamos indicador de instrumental
                 if (gap > 15000 && current.text.isNotBlank() && next.text.isNotBlank()) {
                     newLines.add(
                         LyricsEntry(
@@ -318,47 +317,32 @@ fun Lyrics(
         newLines
     }
 
-    var translatedLines by remember(currentSongId) { mutableStateOf<List<LyricsEntry>?>(null) }
-    var showTranslated by remember(currentSongId) { mutableStateOf(false) }
+    var dualLyricsMode by remember(currentSongId) { mutableStateOf(DualLyricsMode.NONE) }
+    var dualLyricsLines by remember(currentSongId) { mutableStateOf<List<LyricsEntry>?>(null) }
     var showTranslatePrompt by remember(currentSongId) { mutableStateOf(false) }
     var translationPromptText by remember(currentSongId) { mutableStateOf("") }
     var isTranslating by remember(currentSongId) { mutableStateOf(false) }
 
-    var romanizedLines by remember(currentSongId) { mutableStateOf<List<LyricsEntry>?>(null) }
-    var showRomanized by remember(currentSongId) { mutableStateOf(false) }
-    var isRomanizing by remember(currentSongId) { mutableStateOf(false) }
-
-    val displayedLines = if (showTranslated && translatedLines != null) {
-        translatedLines!!
-    } else if (showRomanized && romanizedLines != null) {
-        romanizedLines!!
+    val displayedLines = if (dualLyricsMode != DualLyricsMode.NONE && dualLyricsLines != null) {
+        dualLyricsLines!!
     } else {
         lines
     }
 
     val toggleTranslation = {
-        if (showTranslated) {
-            showTranslated = false
-        } else if (translatedLines != null) {
-            showTranslated = true
-            showRomanized = false
-            showTranslatePrompt = false
-        } else {
+        if (dualLyricsMode == DualLyricsMode.TRANSLATED) {
+            dualLyricsMode = DualLyricsMode.NONE
+        } else if (dualLyricsLines != null && dualLyricsLines?.firstOrNull()?.secondaryText?.isNotBlank() == true && dualLyricsMode == DualLyricsMode.ROMANIZED) {
+            // Already translated but we were showing romanized? Not typical since we overwrite, but let's just re-translate to be safe
             scope.launch {
                 isTranslating = true
                 showTranslatePrompt = false
                 
                 val isZhConversion = translationPromptText == context.getString(R.string.translate_zh_tw_prompt)
-                
                 val itemsToTranslate = mutableListOf<String>()
                 lines.forEach { entry ->
                     if (entry.text.isNotBlank() && entry.agent != "instrumental_gap") {
                         itemsToTranslate.add(entry.text)
-                        if (isZhConversion && entry.words != null) {
-                            entry.words.forEach { word ->
-                                itemsToTranslate.add(word.text)
-                            }
-                        }
                     }
                 }
                 
@@ -368,47 +352,63 @@ fun Lyrics(
                 if (translatedText != null) {
                     val translatedSplit = translatedText.split("\n")
                     val newEntries = lines.toMutableList()
-                    
                     var transIdx = 0
                     for (i in newEntries.indices) {
                         val entry = newEntries[i]
                         if (entry.text.isNotBlank() && entry.agent != "instrumental_gap") {
-                            val newLineText = translatedSplit.getOrElse(transIdx++) { entry.text }
-                            
-                            val newWords = if (isZhConversion && entry.words != null) {
-                                entry.words.map { word ->
-                                    val newWordText = translatedSplit.getOrElse(transIdx++) { word.text }
-                                    word.copy(text = newWordText)
-                                }
-                            } else {
-                                null
-                            }
-                            
-                            newEntries[i] = entry.copy(text = newLineText, words = newWords)
+                            val secondary = translatedSplit.getOrElse(transIdx++) { "" }
+                            newEntries[i] = entry.copy(secondaryText = secondary)
                         }
                     }
-                    
-                    translatedLines = newEntries
-                    showTranslated = true
-                    showRomanized = false
+                    dualLyricsLines = newEntries
+                    dualLyricsMode = DualLyricsMode.TRANSLATED
                 } else {
                     Toast.makeText(context, R.string.translation_failed, Toast.LENGTH_SHORT).show()
                 }
+                isTranslating = false
+            }
+        } else {
+            scope.launch {
+                isTranslating = true
+                showTranslatePrompt = false
                 
+                val itemsToTranslate = mutableListOf<String>()
+                lines.forEach { entry ->
+                    if (entry.text.isNotBlank() && entry.agent != "instrumental_gap") {
+                        itemsToTranslate.add(entry.text)
+                    }
+                }
+                
+                val textToTranslate = itemsToTranslate.joinToString("\n")
+                val translatedText = com.cgens67.avidtune.utils.TranslationHelper.translate(textToTranslate)
+                
+                if (translatedText != null) {
+                    val translatedSplit = translatedText.split("\n")
+                    val newEntries = lines.toMutableList()
+                    var transIdx = 0
+                    for (i in newEntries.indices) {
+                        val entry = newEntries[i]
+                        if (entry.text.isNotBlank() && entry.agent != "instrumental_gap") {
+                            val secondary = translatedSplit.getOrElse(transIdx++) { "" }
+                            newEntries[i] = entry.copy(secondaryText = secondary)
+                        }
+                    }
+                    dualLyricsLines = newEntries
+                    dualLyricsMode = DualLyricsMode.TRANSLATED
+                } else {
+                    Toast.makeText(context, R.string.translation_failed, Toast.LENGTH_SHORT).show()
+                }
                 isTranslating = false
             }
         }
     }
 
     val toggleRomanization = {
-        if (showRomanized) {
-            showRomanized = false
-        } else if (romanizedLines != null) {
-            showRomanized = true
-            showTranslated = false
+        if (dualLyricsMode == DualLyricsMode.ROMANIZED) {
+            dualLyricsMode = DualLyricsMode.NONE
         } else {
             scope.launch {
-                isRomanizing = true
+                isTranslating = true // reuse same loader
                 
                 val itemsToRomanize = mutableListOf<String>()
                 lines.forEach { entry ->
@@ -423,24 +423,20 @@ fun Lyrics(
                 if (romanizedText != null) {
                     val romanizedSplit = romanizedText.split("\n")
                     val newEntries = lines.toMutableList()
-                    
                     var transIdx = 0
                     for (i in newEntries.indices) {
                         val entry = newEntries[i]
                         if (entry.text.isNotBlank() && entry.agent != "instrumental_gap") {
-                            val newLineText = romanizedSplit.getOrElse(transIdx++) { entry.text }
-                            newEntries[i] = entry.copy(text = newLineText, words = null)
+                            val secondary = romanizedSplit.getOrElse(transIdx++) { "" }
+                            newEntries[i] = entry.copy(secondaryText = secondary)
                         }
                     }
-                    
-                    romanizedLines = newEntries
-                    showRomanized = true
-                    showTranslated = false
+                    dualLyricsLines = newEntries
+                    dualLyricsMode = DualLyricsMode.ROMANIZED
                 } else {
                     Toast.makeText(context, R.string.translation_failed, Toast.LENGTH_SHORT).show()
                 }
-                
-                isRomanizing = false
+                isTranslating = false
             }
         }
     }
@@ -1044,7 +1040,7 @@ fun Lyrics(
                             }
                         }
                         else {
-                            if (showTranslatePrompt && !isTranslating && !showTranslated) {
+                            if (showTranslatePrompt && !isTranslating && dualLyricsMode == DualLyricsMode.NONE) {
                                 item(key = "translate_prompt") {
                                     Surface(
                                         modifier = Modifier
@@ -1510,10 +1506,10 @@ fun Lyrics(
                                                 lyricsEntity = activeLyricsEntity,
                                                 mediaMetadata = metadata,
                                                 onDismiss = menuState::dismiss,
-                                                isTranslated = showTranslated,
-                                                onTranslateClick = { toggleTranslation() },
-                                                isRomanized = showRomanized,
-                                                onRomanizeClick = { toggleRomanization() }
+                                                isTranslated = dualLyricsMode == DualLyricsMode.TRANSLATED,
+                                                onTranslateClick = toggleTranslation,
+                                                isRomanized = dualLyricsMode == DualLyricsMode.ROMANIZED,
+                                                onRomanizeClick = toggleRomanization
                                             )
                                         }
                                     }
@@ -1908,3 +1904,4 @@ private fun calculateAutoSwipeThreshold(swipeSensitivity: Float): Int {
 // Preview time constant
 val LyricsPreviewTime = 2.seconds
 const val ANIMATE_SCROLL_DURATION = 300L
+

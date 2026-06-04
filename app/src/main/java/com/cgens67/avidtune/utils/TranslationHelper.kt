@@ -85,10 +85,11 @@ object TranslationHelper {
             val segments = jsonArray.getOrNull(0)?.jsonArray
             if (segments != null) {
                 for (segment in segments) {
-                    val arr = segment.jsonArray
-                    val romaji = arr.getOrNull(2)?.jsonPrimitive?.contentOrNull ?: arr.getOrNull(3)?.jsonPrimitive?.contentOrNull
-                    if (romaji != null) {
-                        resultBuilder.append(romaji)
+                    if (segment is kotlinx.serialization.json.JsonArray) {
+                        val romaji = segment.getOrNull(2)?.jsonPrimitive?.contentOrNull ?: segment.getOrNull(3)?.jsonPrimitive?.contentOrNull
+                        if (romaji != null) {
+                            resultBuilder.append(romaji)
+                        }
                     }
                 }
             }

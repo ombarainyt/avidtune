@@ -536,7 +536,7 @@ fun LyricsMenu(
                                 tint = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         },
-                        text = if (isRomanized) "Original" else "Romanize",
+                        text = if (isRomanized) stringResource(R.string.show_original) else "Romanize",
                         onClick = {
                             onRomanizeClick()
                             onDismiss()

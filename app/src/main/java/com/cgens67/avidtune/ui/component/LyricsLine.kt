@@ -38,7 +38,6 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.graphics.drawscope.clipRect
-import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.graphics.drawscope.scale
 import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.graphics.drawscope.withTransform
@@ -74,7 +73,60 @@ import kotlin.math.cos
 import kotlin.math.exp
 import kotlin.math.sin
 
-@OptIn(ExperimentalFoundationApi::class, ExperimentalMaterial3ExpressiveApi::class)
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
+@Composable
+fun InstrumentalGap(
+    entryTime: Long,
+    nextLineTime: Long,
+    lyricsOffset: Long,
+    playerConnection: PlayerConnection,
+    textColor: Color,
+    isActive: Boolean,
+    modifier: Modifier = Modifier
+) {
+    var smoothPosition by remember { mutableLongStateOf(playerConnection.player.currentPosition + lyricsOffset) }
+
+    LaunchedEffect(isActive) {
+        if (isActive) {
+            var lastPlayerPos = playerConnection.player.currentPosition
+            var lastUpdateTime = System.currentTimeMillis()
+            while (isActive) {
+                withFrameMillis {
+                    val now = System.currentTimeMillis()
+                    val playerPos = playerConnection.player.currentPosition
+                    if (playerPos != lastPlayerPos) {
+                        lastPlayerPos = playerPos
+                        lastUpdateTime = now
+                    }
+                    val elapsed = now - lastUpdateTime
+                    smoothPosition = lastPlayerPos + lyricsOffset + (if (playerConnection.player.isPlaying) elapsed else 0)
+                }
+            }
+        } else {
+            smoothPosition = playerConnection.player.currentPosition + lyricsOffset
+        }
+    }
+
+    val totalDur = (nextLineTime - entryTime).coerceAtLeast(1L).toFloat()
+    val elapsed = (smoothPosition - entryTime).coerceAtLeast(0L).toFloat()
+    val gapProgress = (elapsed / totalDur).coerceIn(0f, 1f)
+
+    Box(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(vertical = 32.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        CircularWavyProgressIndicator(
+            progress = { gapProgress },
+            modifier = Modifier.size(48.dp),
+            color = textColor,
+            trackColor = textColor.copy(alpha = 0.2f),
+        )
+    }
+}
+
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun LyricsLine(
     entry: LyricsEntry,
@@ -98,48 +150,19 @@ fun LyricsLine(
     val (appleMusicLyricsBlur) = rememberPreference(AppleMusicLyricsBlurKey, true)
     val (disableBlur) = rememberPreference(DisableBlurKey, false)
     val playerConnection = LocalPlayerConnection.current ?: return
-    var smoothPosition by remember { mutableLongStateOf(entry.time + lyricsOffset) }
     
     val isTracking = isActive || distanceFromCurrent <= 3
-    LaunchedEffect(isTracking) {
-        if (isTracking) {
-            var lastPlayerPos = playerConnection.player.currentPosition
-            var lastUpdateTime = System.currentTimeMillis()
-            while (isActive) {
-                withFrameMillis {
-                    val now = System.currentTimeMillis()
-                    val playerPos = playerConnection.player.currentPosition
-                    if (playerPos != lastPlayerPos) {
-                        lastPlayerPos = playerPos
-                        lastUpdateTime = now
-                    }
-                    val elapsed = now - lastUpdateTime
-                    smoothPosition = lastPlayerPos + lyricsOffset + (if (playerConnection.player.isPlaying) elapsed else 0)
-                }
-            }
-        } else {
-            smoothPosition = playerConnection.player.currentPosition + lyricsOffset
-        }
-    }
 
     if (entry.agent == "instrumental_gap") {
-        val totalDur = (nextLineTime - entry.time).coerceAtLeast(1L).toFloat()
-        val elapsed = (smoothPosition - entry.time).coerceAtLeast(0L).toFloat()
-        val gapProgress = (elapsed / totalDur).coerceIn(0f, 1f)
-
-        Box(
+        InstrumentalGap(
+            entryTime = entry.time,
+            nextLineTime = nextLineTime,
+            lyricsOffset = lyricsOffset,
+            playerConnection = playerConnection,
+            textColor = textColor,
+            isActive = isActive,
             modifier = modifier
-                .fillMaxWidth()
-                .padding(vertical = 32.dp),
-            contentAlignment = Alignment.Center
-        ) {
-            CircularWavyProgressIndicator(
-                progress = { gapProgress },
-                modifier = Modifier.size(48.dp),
-                color = textColor,
-                trackColor = textColor.copy(alpha = 0.2f),
-            )
-        }
+        )
         return
     }
 
@@ -279,13 +302,15 @@ fun LyricsLine(
                 mainText = mainText,
                 words = effectiveWords,
                 isTracking = isTracking,
-                smoothPosition = smoothPosition,
+                lyricsOffset = lyricsOffset,
+                playerConnection = playerConnection,
                 lyricStyle = lyricStyle,
                 lineColor = lineColor,
                 expressiveAccent = textColor,
                 isBackground = entry.isBackground,
                 focusedAlpha = focusedAlpha,
                 alignment = agentTextAlign,
+                entryTime = entry.time,
                 animateLyrics = animateLyrics
             )
         } else {
@@ -371,6 +396,19 @@ fun LyricsLine(
                 )
             }
         }
+
+        if (entry.secondaryText != null && entry.secondaryText.isNotBlank()) {
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                text = entry.secondaryText,
+                style = lyricStyle.copy(
+                    fontSize = (textSize * 0.75f).sp,
+                    fontWeight = FontWeight.Medium,
+                    color = lineColor.copy(alpha = lineColor.alpha * 0.8f)
+                ),
+                modifier = Modifier.fillMaxWidth()
+            )
+        }
     }
 }
 
@@ -379,15 +417,40 @@ private fun WordLevelLyrics(
     mainText: String,
     words: List<WordTimestamp>,
     isTracking: Boolean,
-    smoothPosition: Long,
+    lyricsOffset: Long,
+    playerConnection: PlayerConnection,
     lyricStyle: TextStyle,
     lineColor: Color,
     expressiveAccent: Color,
     isBackground: Boolean,
     focusedAlpha: Float,
     alignment: TextAlign,
+    entryTime: Long,
     animateLyrics: Boolean = true
 ) {
+    var smoothPosition by remember { mutableLongStateOf(playerConnection.player.currentPosition + lyricsOffset) }
+    
+    LaunchedEffect(isTracking) {
+        if (isTracking) {
+            var lastPlayerPos = playerConnection.player.currentPosition
+            var lastUpdateTime = System.currentTimeMillis()
+            while (isActive) {
+                withFrameMillis {
+                    val now = System.currentTimeMillis()
+                    val playerPos = playerConnection.player.currentPosition
+                    if (playerPos != lastPlayerPos) {
+                        lastPlayerPos = playerPos
+                        lastUpdateTime = now
+                    }
+                    val elapsed = now - lastUpdateTime
+                    smoothPosition = lastPlayerPos + lyricsOffset + (if (playerConnection.player.isPlaying) elapsed else 0)
+                }
+            }
+        } else {
+            smoothPosition = playerConnection.player.currentPosition + lyricsOffset
+        }
+    }
+
     val density = LocalDensity.current
     val textMeasurer = rememberTextMeasurer()
     val glowPaint = remember {
