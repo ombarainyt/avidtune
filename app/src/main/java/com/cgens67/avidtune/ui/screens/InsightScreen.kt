@@ -13,6 +13,7 @@ import android.text.TextPaint
 import android.widget.Toast
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
@@ -30,12 +31,15 @@ import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -47,14 +51,19 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -77,7 +86,9 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
+import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.Shadow
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
@@ -694,10 +705,10 @@ fun SummaryPage(topSongs: List<com.cgens67.avidtune.db.entities.Song>, totalMinu
                     Canvas(modifier = Modifier.fillMaxWidth().height(2.dp)) {
                         drawLine(
                             color = Color.LightGray,
-                            start = Offset(0f, size.height / 2),
-                            end = Offset(size.width, size.height / 2),
+                            start = Offset(0f, this.size.height / 2f),
+                            end = Offset(this.size.width, this.size.height / 2f),
                             strokeWidth = 2.dp.toPx(),
-                            pathEffect = androidx.compose.ui.graphics.PathEffect.dashPathEffect(floatArrayOf(10f, 10f), 0f)
+                            pathEffect = PathEffect.dashPathEffect(floatArrayOf(10f, 10f), 0f)
                         )
                     }
 
@@ -719,10 +730,10 @@ fun SummaryPage(topSongs: List<com.cgens67.avidtune.db.entities.Song>, totalMinu
                     Canvas(modifier = Modifier.fillMaxWidth().height(2.dp)) {
                         drawLine(
                             color = Color.LightGray,
-                            start = Offset(0f, size.height / 2),
-                            end = Offset(size.width, size.height / 2),
+                            start = Offset(0f, this.size.height / 2f),
+                            end = Offset(this.size.width, this.size.height / 2f),
                             strokeWidth = 2.dp.toPx(),
-                            pathEffect = androidx.compose.ui.graphics.PathEffect.dashPathEffect(floatArrayOf(10f, 10f), 0f)
+                            pathEffect = PathEffect.dashPathEffect(floatArrayOf(10f, 10f), 0f)
                         )
                     }
 
