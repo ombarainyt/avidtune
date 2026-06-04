@@ -1,8 +1,14 @@
 package com.cgens67.avidtune.ui.screens
 
-import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.core.LinearEasing
-import androidx.compose.animation.core.tween
+import android.content.Intent
+import android.widget.Toast
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.slideInVertically
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -43,11 +49,16 @@ import androidx.compose.runtime.withFrameMillis
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.PathEffect
+import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -64,6 +75,7 @@ import com.cgens67.avidtune.extensions.toMediaItem
 import com.cgens67.avidtune.playback.queues.ListQueue
 import com.cgens67.avidtune.viewmodels.InsightViewModel
 import kotlinx.coroutines.launch
+import kotlin.math.abs
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -109,24 +121,39 @@ fun InsightScreen(
     var currentProgress by remember { mutableFloatStateOf(0f) }
 
     LaunchedEffect(pagerState.currentPage, isPaused) {
-        if (!isPaused) {
-            var lastTime = 0L
+        currentProgress = 0f
+        if (!isPaused && pagerState.currentPage < pageCount - 1) {
+            val duration = 5000f
+            val startTime = withFrameMillis { it }
             while (currentProgress < 1f) {
                 withFrameMillis { time ->
-                    if (lastTime == 0L) lastTime = time
-                    val dt = time - lastTime
-                    lastTime = time
-                    currentProgress += dt / 5000f // 5 seconds per page
+                    currentProgress = (time - startTime) / duration
                 }
             }
-            if (currentProgress >= 1f && pagerState.currentPage < pageCount - 1) {
-                currentProgress = 0f
-                pagerState.animateScrollToPage(pagerState.currentPage + 1)
-            }
+            pagerState.animateScrollToPage(pagerState.currentPage + 1)
+        } else if (pagerState.currentPage == pageCount - 1) {
+            currentProgress = 1f // Stay filled on last page
         }
     }
 
-    Box(modifier = Modifier.fillMaxSize().background(Color.Black)) {
+    // Gradient transition logic
+    val pageColors = listOf(
+        Color(0xFF8E2DE2) to Color(0xFF4A00E0), // Intro: Purple
+        Color(0xFF00b09b) to Color(0xFF96c93d), // Time: Green
+        Color(0xFFFF512F) to Color(0xFFDD2476), // Top Song: Pink/Red
+        Color(0xFFcb2d3e) to Color(0xFFef473a), // Artists: Red
+        Color(0xFF141E30) to Color(0xFF243B55)  // Summary: Dark Blue
+    )
+
+    val pageOffset = pagerState.currentPageOffsetFraction
+    val currentPage = pagerState.currentPage
+    val nextPageIndex = (currentPage + if (pageOffset > 0) 1 else -1).coerceIn(0, pageColors.lastIndex)
+    val fraction = abs(pageOffset)
+
+    val colorTop = lerp(pageColors[currentPage].first, pageColors[nextPageIndex].first, fraction)
+    val colorBottom = lerp(pageColors[currentPage].second, pageColors[nextPageIndex].second, fraction)
+
+    Box(modifier = Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(colorTop, colorBottom)))) {
         HorizontalPager(
             state = pagerState,
             userScrollEnabled = false,
@@ -147,7 +174,7 @@ fun InsightScreen(
                                         currentProgress = 0f
                                         pagerState.animateScrollToPage(pagerState.currentPage + 1)
                                     } else {
-                                        currentProgress = 1f // Stay on last page
+                                        currentProgress = 1f
                                     }
                                 } else {
                                     if (pagerState.currentPage > 0) {
@@ -162,14 +189,13 @@ fun InsightScreen(
                     )
                 }
         ) { page ->
+            val isActive = page == pagerState.currentPage
             when (page) {
-                0 -> IntroPage()
-                1 -> TotalTimePage(totalMinutes)
-                2 -> TopSongPage(topSongs.firstOrNull(), topSongStats?.songCountListened ?: 0)
-                3 -> TopArtistsPage(topArtists)
-                4 -> SummaryPage(topSongs, totalMinutes, topArtists.firstOrNull()?.artist?.name) {
-                    navController.navigateUp()
-                }
+                0 -> IntroPage(isActive)
+                1 -> TotalTimePage(totalMinutes, isActive)
+                2 -> TopSongPage(topSongs.firstOrNull(), topSongStats?.songCountListened ?: 0, isActive)
+                3 -> TopArtistsPage(topArtists, isActive)
+                4 -> SummaryPage(topSongs, totalMinutes, topArtists.firstOrNull()?.artist?.name, isActive)
             }
         }
 
@@ -244,14 +270,21 @@ fun InsightScreen(
 }
 
 @Composable
-fun IntroPage() {
+fun IntroPage(isActive: Boolean) {
+    val scale by animateFloatAsState(
+        targetValue = if (isActive) 1f else 0.8f,
+        animationSpec = spring(dampingRatio = 0.5f, stiffness = 100f),
+        label = "scale"
+    )
+
     Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(Brush.verticalGradient(listOf(Color(0xFF8E2DE2), Color(0xFF4A00E0)))),
+        modifier = Modifier.fillMaxSize(),
         contentAlignment = Alignment.Center
     ) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            modifier = Modifier.scale(scale)
+        ) {
             Text(
                 text = stringResource(R.string.insight_intro_ready),
                 fontSize = 32.sp,
@@ -269,207 +302,317 @@ fun IntroPage() {
 }
 
 @Composable
-fun TotalTimePage(minutes: Long) {
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(Brush.verticalGradient(listOf(Color(0xFF00b09b), Color(0xFF96c93d)))),
-        contentAlignment = Alignment.Center
-    ) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(32.dp)) {
-            Text(
-                text = stringResource(R.string.insight_minutes_spent),
-                fontSize = 24.sp,
-                color = Color.White
-            )
-            Text(
-                text = "$minutes",
-                fontSize = 80.sp,
-                color = Color.White,
-                fontWeight = FontWeight.Black
-            )
-            Text(
-                text = stringResource(R.string.insight_minutes),
-                fontSize = 24.sp,
-                color = Color.White,
-                fontWeight = FontWeight.Bold
-            )
-            Spacer(Modifier.height(16.dp))
-            Text(
-                text = stringResource(R.string.insight_minutes_listening),
-                fontSize = 20.sp,
-                color = Color.White,
-                textAlign = TextAlign.Center
-            )
-        }
-    }
-}
+fun TotalTimePage(minutes: Long, isActive: Boolean) {
+    val scale by animateFloatAsState(
+        targetValue = if (isActive) 1f else 0.8f,
+        animationSpec = spring(dampingRatio = 0.5f, stiffness = 100f),
+        label = "scale"
+    )
 
-@Composable
-fun TopSongPage(song: com.cgens67.avidtune.db.entities.Song?, playCount: Int) {
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(Brush.verticalGradient(listOf(Color(0xFFFF512F), Color(0xFFDD2476)))),
-        contentAlignment = Alignment.Center
-    ) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(32.dp)) {
-            Text(
-                text = stringResource(R.string.insight_top_song_was),
-                fontSize = 24.sp,
-                color = Color.White,
-                fontWeight = FontWeight.Bold
-            )
-            Spacer(Modifier.height(32.dp))
-            AsyncImage(
-                model = song?.song?.thumbnailUrl,
-                contentDescription = null,
-                modifier = Modifier
-                    .size(250.dp)
-                    .shadow(16.dp, RoundedCornerShape(12.dp))
-                    .clip(RoundedCornerShape(12.dp)),
-                contentScale = ContentScale.Crop
-            )
-            Spacer(Modifier.height(24.dp))
-            Text(
-                text = song?.song?.title ?: "",
-                fontSize = 32.sp,
-                color = Color.White,
-                fontWeight = FontWeight.Black,
-                textAlign = TextAlign.Center,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis
-            )
-            Text(
-                text = song?.artists?.joinToString { it.name } ?: "",
-                fontSize = 20.sp,
-                color = Color.White.copy(alpha = 0.8f),
-                textAlign = TextAlign.Center
-            )
-            Spacer(Modifier.height(32.dp))
-            Text(
-                text = "${stringResource(R.string.insight_with)} $playCount ${stringResource(R.string.insight_plays)}",
-                fontSize = 18.sp,
-                color = Color.White,
-                fontWeight = FontWeight.Bold,
-                modifier = Modifier
-                    .background(Color.Black.copy(alpha = 0.3f), RoundedCornerShape(16.dp))
-                    .padding(horizontal = 16.dp, vertical = 8.dp)
-            )
-        }
+    val trips = maxOf(1L, minutes / 270L)
+    val comparison = if (minutes > 600) {
+        stringResource(R.string.insight_time_comparison, trips)
+    } else {
+        val movies = maxOf(1L, minutes / 180L)
+        stringResource(R.string.insight_time_comparison_alt, movies)
     }
-}
 
-@Composable
-fun TopArtistsPage(artists: List<com.cgens67.avidtune.db.entities.Artist>) {
     Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(Brush.verticalGradient(listOf(Color(0xFFcb2d3e), Color(0xFFef473a)))),
+        modifier = Modifier.fillMaxSize(),
         contentAlignment = Alignment.Center
     ) {
-        Column(horizontalAlignment = Alignment.Start, modifier = Modifier.padding(32.dp)) {
-            Text(
-                text = stringResource(R.string.insight_artists_title),
-                fontSize = 32.sp,
-                color = Color.White,
-                fontWeight = FontWeight.Black,
-                modifier = Modifier.padding(bottom = 32.dp)
-            )
-            
-            artists.take(5).forEachIndexed { index, artist ->
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.padding(vertical = 12.dp)
-                ) {
-                    Text(
-                        text = "#${index + 1}",
-                        fontSize = 24.sp,
-                        color = Color.White.copy(alpha = 0.7f),
-                        fontWeight = FontWeight.Bold,
-                        modifier = Modifier.width(40.dp)
-                    )
-                    AsyncImage(
-                        model = artist.artist.thumbnailUrl,
-                        contentDescription = null,
-                        modifier = Modifier
-                            .size(56.dp)
-                            .clip(CircleShape),
-                        contentScale = ContentScale.Crop
-                    )
-                    Spacer(Modifier.width(16.dp))
-                    Text(
-                        text = artist.artist.name,
-                        fontSize = 24.sp,
-                        color = Color.White,
-                        fontWeight = FontWeight.Bold,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                }
+        AnimatedVisibility(visible = isActive, enter = fadeIn() + slideInVertically(initialOffsetY = { 100 })) {
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally, 
+                modifier = Modifier.padding(32.dp).scale(scale)
+            ) {
+                Text(
+                    text = stringResource(R.string.insight_minutes_spent),
+                    fontSize = 24.sp,
+                    color = Color.White
+                )
+                Text(
+                    text = "$minutes",
+                    fontSize = 80.sp,
+                    color = Color.White,
+                    fontWeight = FontWeight.Black
+                )
+                Text(
+                    text = stringResource(R.string.insight_minutes),
+                    fontSize = 24.sp,
+                    color = Color.White,
+                    fontWeight = FontWeight.Bold
+                )
+                Spacer(Modifier.height(16.dp))
+                Text(
+                    text = stringResource(R.string.insight_minutes_listening),
+                    fontSize = 20.sp,
+                    color = Color.White,
+                    textAlign = TextAlign.Center
+                )
+                Spacer(Modifier.height(32.dp))
+                Text(
+                    text = comparison,
+                    fontSize = 16.sp,
+                    color = Color.White.copy(alpha = 0.8f),
+                    textAlign = TextAlign.Center,
+                    fontWeight = FontWeight.Medium,
+                    modifier = Modifier
+                        .background(Color.Black.copy(alpha = 0.2f), RoundedCornerShape(16.dp))
+                        .padding(16.dp)
+                )
             }
         }
     }
 }
 
 @Composable
-fun SummaryPage(topSongs: List<com.cgens67.avidtune.db.entities.Song>, totalMinutes: Long, topArtistName: String?, onClose: () -> Unit) {
+fun TopSongPage(song: com.cgens67.avidtune.db.entities.Song?, playCount: Int, isActive: Boolean) {
+    val scale by animateFloatAsState(
+        targetValue = if (isActive) 1f else 0.5f,
+        animationSpec = spring(dampingRatio = 0.5f, stiffness = 100f),
+        label = "scale"
+    )
+
     Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(Brush.verticalGradient(listOf(Color(0xFF141E30), Color(0xFF243B55)))),
+        modifier = Modifier.fillMaxSize(),
         contentAlignment = Alignment.Center
     ) {
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
-            modifier = Modifier.padding(24.dp)
-        ) {
-            Text(
-                text = stringResource(R.string.insight_summary_title),
-                fontSize = 32.sp,
-                color = Color.White,
-                fontWeight = FontWeight.Black,
-                textAlign = TextAlign.Center
-            )
-            
-            Spacer(Modifier.height(32.dp))
-            
-            Box(
-                modifier = Modifier
-                    .background(Color.White.copy(alpha = 0.1f), RoundedCornerShape(24.dp))
-                    .padding(24.dp)
-                    .fillMaxWidth()
+        AnimatedVisibility(visible = isActive, enter = fadeIn() + slideInVertically(initialOffsetY = { 100 })) {
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally, 
+                modifier = Modifier.padding(32.dp)
             ) {
-                Column {
-                    Text(stringResource(R.string.insight_minutes_spent), color = Color.White.copy(alpha = 0.7f), fontSize = 14.sp)
-                    Text("$totalMinutes", color = Color.White, fontSize = 28.sp, fontWeight = FontWeight.Bold)
-                    
-                    Spacer(Modifier.height(16.dp))
-                    
-                    Text(stringResource(R.string.insight_artists_title).replace("Your", "Top"), color = Color.White.copy(alpha = 0.7f), fontSize = 14.sp)
-                    Text(topArtistName ?: "N/A", color = Color.White, fontSize = 24.sp, fontWeight = FontWeight.Bold)
-                    
-                    Spacer(Modifier.height(16.dp))
-                    
-                    Text("Top 5 ${stringResource(R.string.insight_top_songs).replace("\n", " ")}", color = Color.White.copy(alpha = 0.7f), fontSize = 14.sp)
-                    topSongs.take(5).forEachIndexed { index, song ->
+                Text(
+                    text = stringResource(R.string.insight_top_song_was),
+                    fontSize = 24.sp,
+                    color = Color.White,
+                    fontWeight = FontWeight.Bold
+                )
+                Spacer(Modifier.height(32.dp))
+                AsyncImage(
+                    model = song?.song?.thumbnailUrl,
+                    contentDescription = null,
+                    modifier = Modifier
+                        .size(250.dp)
+                        .scale(scale)
+                        .shadow(16.dp, RoundedCornerShape(12.dp))
+                        .clip(RoundedCornerShape(12.dp)),
+                    contentScale = ContentScale.Crop
+                )
+                Spacer(Modifier.height(24.dp))
+                Text(
+                    text = song?.song?.title ?: "",
+                    fontSize = 32.sp,
+                    color = Color.White,
+                    fontWeight = FontWeight.Black,
+                    textAlign = TextAlign.Center,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Text(
+                    text = song?.artists?.joinToString { it.name } ?: "",
+                    fontSize = 20.sp,
+                    color = Color.White.copy(alpha = 0.8f),
+                    textAlign = TextAlign.Center
+                )
+                Spacer(Modifier.height(32.dp))
+                Text(
+                    text = "${stringResource(R.string.insight_with)} $playCount ${stringResource(R.string.insight_plays)}",
+                    fontSize = 18.sp,
+                    color = Color.White,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier
+                        .background(Color.Black.copy(alpha = 0.3f), RoundedCornerShape(16.dp))
+                        .padding(horizontal = 16.dp, vertical = 8.dp)
+                )
+            }
+        }
+    }
+}
+
+@Composable
+fun TopArtistsPage(artists: List<com.cgens67.avidtune.db.entities.Artist>, isActive: Boolean) {
+    Box(
+        modifier = Modifier.fillMaxSize(),
+        contentAlignment = Alignment.Center
+    ) {
+        AnimatedVisibility(visible = isActive, enter = fadeIn() + slideInVertically(initialOffsetY = { 100 })) {
+            Column(horizontalAlignment = Alignment.Start, modifier = Modifier.padding(32.dp)) {
+                Text(
+                    text = stringResource(R.string.insight_artists_title),
+                    fontSize = 32.sp,
+                    color = Color.White,
+                    fontWeight = FontWeight.Black,
+                    modifier = Modifier.padding(bottom = 32.dp)
+                )
+                
+                artists.take(5).forEachIndexed { index, artist ->
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.padding(vertical = 12.dp)
+                    ) {
                         Text(
-                            text = "${index + 1}. ${song.song.title}",
+                            text = "#${index + 1}",
+                            fontSize = 24.sp,
+                            color = Color.White.copy(alpha = 0.7f),
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.width(40.dp)
+                        )
+                        AsyncImage(
+                            model = artist.artist.thumbnailUrl,
+                            contentDescription = null,
+                            modifier = Modifier
+                                .size(56.dp)
+                                .clip(CircleShape),
+                            contentScale = ContentScale.Crop
+                        )
+                        Spacer(Modifier.width(16.dp))
+                        Text(
+                            text = artist.artist.name,
+                            fontSize = 24.sp,
                             color = Color.White,
-                            fontSize = 16.sp,
-                            fontWeight = FontWeight.Medium,
+                            fontWeight = FontWeight.Bold,
                             maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                            modifier = Modifier.padding(vertical = 4.dp)
+                            overflow = TextOverflow.Ellipsis
                         )
                     }
                 }
             }
-            
-            Spacer(Modifier.height(80.dp)) // Space for the play button
-            
-            TextButton(onClick = onClose) {
-                Text(stringResource(R.string.insight_close), color = Color.White.copy(alpha = 0.5f))
+        }
+    }
+}
+
+@Composable
+fun SummaryPage(topSongs: List<com.cgens67.avidtune.db.entities.Song>, totalMinutes: Long, topArtistName: String?, isActive: Boolean) {
+    val context = LocalContext.current
+
+    Box(
+        modifier = Modifier.fillMaxSize(),
+        contentAlignment = Alignment.Center
+    ) {
+        AnimatedVisibility(visible = isActive, enter = fadeIn() + slideInVertically(initialOffsetY = { 100 })) {
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                modifier = Modifier.padding(24.dp)
+            ) {
+                // "Receipt" Style Card
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth(0.9f)
+                        .shadow(16.dp, RoundedCornerShape(16.dp))
+                        .background(Color(0xFFFDFDFD), RoundedCornerShape(16.dp))
+                        .padding(24.dp)
+                ) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text(
+                            text = stringResource(R.string.insight_summary_title),
+                            fontSize = 22.sp,
+                            color = Color.Black,
+                            fontWeight = FontWeight.Black,
+                            textAlign = TextAlign.Center,
+                            letterSpacing = 1.sp
+                        )
+
+                        Spacer(Modifier.height(16.dp))
+
+                        Canvas(modifier = Modifier.fillMaxWidth().height(2.dp)) {
+                            drawLine(
+                                color = Color.LightGray,
+                                start = Offset(0f, size.height / 2),
+                                end = Offset(size.width, size.height / 2),
+                                strokeWidth = 2.dp.toPx(),
+                                pathEffect = PathEffect.dashPathEffect(floatArrayOf(10f, 10f), 0f)
+                            )
+                        }
+
+                        Spacer(Modifier.height(16.dp))
+
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                            Column {
+                                Text(stringResource(R.string.insight_minutes_spent).uppercase(), color = Color.Gray, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                                Text("$totalMinutes", color = Color.Black, fontSize = 24.sp, fontWeight = FontWeight.Bold)
+                            }
+                            Column(horizontalAlignment = Alignment.End) {
+                                Text(stringResource(R.string.insight_artists_title).replace("Your", "Top").uppercase(), color = Color.Gray, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                                Text(topArtistName ?: "N/A", color = Color.Black, fontSize = 20.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.width(120.dp), textAlign = TextAlign.End)
+                            }
+                        }
+
+                        Spacer(Modifier.height(16.dp))
+
+                        Canvas(modifier = Modifier.fillMaxWidth().height(2.dp)) {
+                            drawLine(
+                                color = Color.LightGray,
+                                start = Offset(0f, size.height / 2),
+                                end = Offset(size.width, size.height / 2),
+                                strokeWidth = 2.dp.toPx(),
+                                pathEffect = PathEffect.dashPathEffect(floatArrayOf(10f, 10f), 0f)
+                            )
+                        }
+
+                        Spacer(Modifier.height(16.dp))
+
+                        Text("TOP 5", color = Color.Gray, fontSize = 12.sp, fontWeight = FontWeight.Bold, modifier = Modifier.align(Alignment.Start))
+                        Spacer(Modifier.height(8.dp))
+                        
+                        topSongs.take(5).forEachIndexed { index, song ->
+                            Row(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                                Text("${index + 1}", color = Color.Black, fontSize = 14.sp, fontWeight = FontWeight.Bold, modifier = Modifier.width(20.dp))
+                                Text(
+                                    text = song.song.title,
+                                    color = Color.Black,
+                                    fontSize = 14.sp,
+                                    fontWeight = FontWeight.Medium,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
+                        }
+                        
+                        Spacer(Modifier.height(24.dp))
+                        
+                        // Fake barcode
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
+                            val bars = listOf(2, 4, 1, 3, 2, 5, 1, 2, 4, 2, 1, 3, 2, 4)
+                            bars.forEach { width ->
+                                Box(modifier = Modifier.padding(horizontal = 1.dp).width(width.dp).height(30.dp).background(Color.Black))
+                            }
+                        }
+                    }
+                }
+                
+                Spacer(Modifier.height(32.dp))
+
+                Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                    Button(
+                        onClick = {
+                            val shareIntent = Intent().apply {
+                                action = Intent.ACTION_SEND
+                                type = "text/plain"
+                                val topSongText = topSongs.firstOrNull()?.song?.title ?: "N/A"
+                                putExtra(Intent.EXTRA_TEXT, context.getString(R.string.insight_share_text, topArtistName ?: "N/A", totalMinutes, topSongText))
+                            }
+                            context.startActivity(Intent.createChooser(shareIntent, context.getString(R.string.insight_share)))
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = Color.White, contentColor = Color.Black)
+                    ) {
+                        Icon(painter = painterResource(R.drawable.share), contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(8.dp))
+                        Text(stringResource(R.string.insight_share), fontWeight = FontWeight.Bold)
+                    }
+
+                    Button(
+                        onClick = {
+                            Toast.makeText(context, context.getString(R.string.insight_downloaded_toast), Toast.LENGTH_SHORT).show()
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = Color.White, contentColor = Color.Black)
+                    ) {
+                        Icon(painter = painterResource(R.drawable.download), contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(8.dp))
+                        Text(stringResource(R.string.insight_download), fontWeight = FontWeight.Bold)
+                    }
+                }
             }
         }
     }

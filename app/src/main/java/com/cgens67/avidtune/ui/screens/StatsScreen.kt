@@ -590,19 +590,19 @@ fun InsightBottomSheetContent(
             horizontalArrangement = Arrangement.SpaceEvenly
         ) {
             InsightFeatureItem(
-                icon = "🎵",
+                iconRes = R.drawable.music_note,
                 label = stringResource(R.string.insight_top_songs)
             )
             InsightFeatureItem(
-                icon = "🎤",
+                iconRes = R.drawable.artist,
                 label = stringResource(R.string.insight_top_artists)
             )
             InsightFeatureItem(
-                icon = "📊",
+                iconRes = R.drawable.equalizer,
                 label = stringResource(R.string.insight_full_stats)
             )
             InsightFeatureItem(
-                icon = "📥",
+                iconRes = R.drawable.download,
                 label = stringResource(R.string.insight_download_report)
             )
         }
@@ -627,24 +627,27 @@ fun InsightBottomSheetContent(
 
 @Composable
 fun InsightFeatureItem(
-    icon: String,
+    iconRes: Int,
     label: String
 ) {
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
         modifier = Modifier.width(80.dp)
     ) {
-        Text(
-            text = icon,
-            fontSize = 32.sp
+        Icon(
+            painter = painterResource(id = iconRes),
+            contentDescription = null,
+            modifier = Modifier.size(32.dp),
+            tint = MaterialTheme.colorScheme.primary
         )
-        Spacer(modifier = Modifier.height(4.dp))
+        Spacer(modifier = Modifier.height(8.dp))
         Text(
             text = label,
             style = MaterialTheme.typography.labelSmall,
             textAlign = TextAlign.Center,
             fontSize = 11.sp,
-            lineHeight = 14.sp
+            lineHeight = 14.sp,
+            color = MaterialTheme.colorScheme.onSurface
         )
     }
 }
