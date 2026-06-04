@@ -470,7 +470,6 @@ fun StatsScreen(
     // BottomSheet de Insight
     if (showInsightBottomSheet) {
         val totalMinutes = mostPlayedSongsStats.sumOf { it.timeListened ?: 0L } / 60000L
-        val topArtist = mostPlayedArtists.firstOrNull()?.artist?.name ?: "Unknown"
 
         ModalBottomSheet(
             onDismissRequest = { showInsightBottomSheet = false },
@@ -478,7 +477,6 @@ fun StatsScreen(
         ) {
             InsightBottomSheetContent(
                 totalMinutes = totalMinutes,
-                topArtist = topArtist,
                 onNavigateToFullInsight = {
                     coroutineScope.launch {
                         sheetState.hide()
@@ -500,7 +498,6 @@ fun StatsScreen(
 @Composable
 fun InsightBottomSheetContent(
     totalMinutes: Long,
-    topArtist: String,
     onNavigateToFullInsight: () -> Unit,
     onDismiss: () -> Unit
 ) {
@@ -572,8 +569,8 @@ fun InsightBottomSheetContent(
                         color = Color.White
                     )
 
-                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                        Column {
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
                             Text(
                                 text = "$totalMinutes",
                                 fontSize = 42.sp,
@@ -582,24 +579,6 @@ fun InsightBottomSheetContent(
                             )
                             Text(
                                 text = stringResource(R.string.insight_minutes),
-                                fontSize = 14.sp,
-                                color = Color.White.copy(alpha = 0.9f)
-                            )
-                        }
-
-                        Column(horizontalAlignment = Alignment.End) {
-                            Text(
-                                text = topArtist,
-                                fontSize = 28.sp,
-                                fontWeight = FontWeight.Black,
-                                color = Color.White,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                                modifier = Modifier.width(150.dp),
-                                textAlign = TextAlign.End
-                            )
-                            Text(
-                                text = stringResource(R.string.insight_top_artists).replace("\n", " "),
                                 fontSize = 14.sp,
                                 color = Color.White.copy(alpha = 0.9f)
                             )

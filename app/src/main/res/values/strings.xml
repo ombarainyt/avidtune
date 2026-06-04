@@ -863,4 +863,14 @@
     <string name="insight_close">Close</string>
     <string name="insight_play">Play Top Songs</string>
     <string name="insight_share_text">Check out my AvidTune Insight!\n\nTop Artist: %1$s\nTotal Time: %2$d mins\nTop Song: %3$s</string>
+    
+    <!-- Insight Time Comparisons -->
+    <string name="insight_time_0">It looks like you haven\'t listened to any music yet. Let\'s find your first song!</string>
+    <string name="insight_time_1_10">Just getting started! You\'re beginning your musical journey.</string>
+    <string name="insight_time_11_20">A quick session. A perfect soundtrack for a brief break.</string>
+    <string name="insight_time_21_50">You\'re getting into the groove! Music is starting to find its place.</string>
+    <string name="insight_time_51_80">Over an hour of pure rhythm. You\'re building a nice soundtrack!</string>
+    <string name="insight_time_90_200">An impressive session. You\'ve spent a solid amount of time in your own world.</string>
+    <string name="insight_time_300_500">An incredible musical marathon! Your passion for music is undeniable.</string>
+    <string name="insight_time_600_plus">Unstoppable! You\'ve practically lived in AvidTune this year.</string>
 </resources>
