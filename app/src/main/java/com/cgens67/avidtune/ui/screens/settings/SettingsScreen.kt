@@ -375,7 +375,7 @@ fun SettingsScreen(
         !isStorageGranted
     }
 
-    val prefs = context.getSharedPreferences("settings", Context.MODEPRIVATE)
+    val prefs = context.getSharedPreferences("settings", Context.MODE_PRIVATE)
     var hasRequestedPermissions by remember { 
         mutableStateOf(prefs.getBoolean("has_requested_permissions", false)) 
     }
