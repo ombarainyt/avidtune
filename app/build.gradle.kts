@@ -128,6 +128,7 @@ dependencies {
     implementation(projects.materialColorUtilities)
 
     implementation(libs.coil)
+    implementation(libs.coil.gif)
     implementation(libs.shimmer)
 
     implementation(libs.media3)
