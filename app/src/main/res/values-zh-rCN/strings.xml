@@ -819,5 +819,66 @@
     <string name="romanize">罗马音</string>
     <string name="hide_romanized">隐藏罗马音</string>
 
+    <!-- Insight Strings -->
+    <string name="avidtune_insight">AvidTune 年度总结</string>
+    <string name="insight_discover_year">探索你的年度音乐</string>
+    <string name="insight_your_musical_year">你的年度音乐</string>
+    <string name="insight_tap_to_view">点击查看你的完整统计数据</string>
+    <string name="insight_top_songs">最爱\n歌曲</string>
+    <string name="insight_top_artists">最爱\n歌手</string>
+    <string name="insight_full_stats">完整\n统计</string>
+    <string name="insight_download_report">下载\n报告</string>
+    <string name="insight_view_full">查看完整 AvidTune 年度总结</string>
+    <string name="insight_no_data">今年暂无可用数据。</string>
+    <string name="insight_intro_ready">准备好回顾你的</string>
+    <string name="insight_intro_ready_2">年度音乐了吗？</string>
+    <string name="insight_intro_line1">今年，你的世界充满了节奏...</string>
+    <string name="insight_intro_line2">AVIDTUNE 年度总结</string>
+    <string name="insight_intro_line3">有一个声音让你百听不厌：</string>
+    <string name="insight_top_artist_reveal">你的排名第一的歌手是...</string>
+    <string name="insight_minutes_spent">你一共花了</string>
+    <string name="insight_minutes">分钟</string>
+    <string name="insight_minutes_listening">聆听你最爱的歌曲。</string>
+    <string name="insight_time_comparison">这相当于乘坐新干线往返东京和京都 %1$d 次的时间！</string>
+    <string name="insight_top_song_was">你的最爱歌曲是</string>
+    <string name="insight_with">播放了</string>
+    <string name="insight_plays">次</string>
+    <string name="insight_artists_title">你最常听的歌手</string>
+    <string name="insight_summary_title">AvidTune 2026 年度总结</string>
+    <string name="insight_share">分享</string>
+    <string name="insight_download">下载</string>
+    <string name="insight_downloaded_toast">报告已保存至相册！</string>
+    <string name="insight_close">关闭</string>
+    <string name="insight_play">播放最常听歌曲</string>
+    <string name="insight_share_text">来看看我的 AvidTune 年度总结！\n\n最常听歌手：%1$s\n总时长：%2$d 分钟\n最爱歌曲：%3$s</string>
 
+    <!-- Insight Time Comparisons -->
+    <string name="insight_time_0">看来你还没有听过任何音乐呢。</string>
+    <string name="insight_time_1_10">才刚刚开始！</string>
+    <string name="insight_time_11_20">简短的音乐时光。</string>
+    <string name="insight_time_21_50">渐入佳境！音乐开始融入你的生活。</string>
+    <string name="insight_time_51_80">你正在建立一个很棒的歌单！</string>
+    <string name="insight_time_90_200">你花了不少时间听歌。</string>
+    <string name="insight_time_300_500">一场音乐马拉松。</string>
+    <string name="insight_time_600_plus">今年你几乎可以说是住在 AvidTune 里了。</string>
+    
+    <!-- News -->
+    <string name="news">新闻</string>
+    <string name="search_news_placeholder">搜索新闻...</string>
+    <string name="search_results">搜索结果</string>
+    <string name="latest_news">最新新闻</string>
+    <plurals name="n_articles">
+        <item quantity="other">%d 篇文章</item>
+    </plurals>
+    <string name="important">重要</string>
+    <string name="read_more">阅读更多</string>
+    <string name="loading_news">正在加载新闻...</string>
+    <string name="no_news_available">暂无新闻</string>
+    <string name="try_different_keywords">尝试其他关键词</string>
+    <string name="check_back_later">请稍后再来看看</string>
+    <string name="something_went_wrong">出了些问题</string>
+    <string name="failed_to_fetch_news">获取新闻失败</string>
+    <string name="loading">正在加载...</string>
+    <string name="error">错误</string>
+    <string name="could_not_load_article">无法加载文章</string>
 </resources>
