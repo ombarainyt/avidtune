@@ -63,6 +63,7 @@ import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -120,7 +121,7 @@ fun ViewNewsScreen(
                     ) {
                         Icon(
                             painter = painterResource(R.drawable.arrow_back),
-                            contentDescription = "Back",
+                            contentDescription = stringResource(R.string.back),
                         )
                     }
                 },
@@ -312,7 +313,7 @@ private fun ViewNewsMetaRow(
                 onClick = {},
                 label = {
                     Text(
-                        text = "IMPORTANT",
+                        text = stringResource(R.string.important),
                         fontWeight = FontWeight.Bold
                     )
                 },
@@ -415,7 +416,7 @@ private fun ViewNewsLoadingState(modifier: Modifier = Modifier) {
                     trackColor = MaterialTheme.colorScheme.surfaceContainerHighest
                 )
                 Text(
-                    text = "Loading...",
+                    text = stringResource(R.string.loading),
                     style = MaterialTheme.typography.headlineSmall,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onSurface
@@ -466,7 +467,7 @@ private fun ViewNewsErrorState(
                 }
 
                 Text(
-                    text = "Error",
+                    text = stringResource(R.string.error),
                     style = MaterialTheme.typography.headlineMedium,
                     fontWeight = FontWeight.ExtraBold,
                     textAlign = TextAlign.Center,
@@ -474,7 +475,7 @@ private fun ViewNewsErrorState(
                 )
 
                 Text(
-                    text = "Could not load article",
+                    text = stringResource(R.string.could_not_load_article),
                     style = MaterialTheme.typography.bodyLarge,
                     textAlign = TextAlign.Center,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -502,7 +503,7 @@ private fun ViewNewsErrorState(
                     contentPadding = PaddingValues(horizontal = 32.dp, vertical = 16.dp)
                 ) {
                     Text(
-                        text = "Retry",
+                        text = stringResource(R.string.action_retry),
                         style = MaterialTheme.typography.labelLarge,
                         fontWeight = FontWeight.Bold
                     )
