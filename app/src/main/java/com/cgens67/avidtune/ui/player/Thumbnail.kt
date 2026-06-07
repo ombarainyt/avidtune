@@ -248,6 +248,28 @@ fun Thumbnail(
                 }
             }
         }
+        
+        // DISPLAY THE ERROR DESIGN WHEN IT OCCURS
+        AnimatedVisibility(
+            visible = error != null,
+            enter = fadeIn(),
+            exit = fadeOut(),
+            modifier = Modifier
+                .align(Alignment.Center)
+                .padding(horizontal = 16.dp)
+                .statusBarsPadding()
+        ) {
+            error?.let { err ->
+                PlaybackError(
+                    error = err,
+                    mediaId = mediaMetadata?.id,
+                    retry = {
+                        playerConnection.player.prepare()
+                        playerConnection.player.play()
+                    }
+                )
+            }
+        }
 
         var showSeekEffect by remember { mutableStateOf(false) }
         var seekDirection by remember { mutableStateOf("") }
@@ -278,6 +300,7 @@ fun Thumbnail(
         }
     }
 }
+
 @ExperimentalFoundationApi
 fun SnapLayoutInfoProvider(
     lazyGridState: LazyGridState,
