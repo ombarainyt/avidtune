@@ -3,22 +3,33 @@ package com.cgens67.avidtune.ui.screens.search
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.add
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.only
-import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.systemBars
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyItemScope
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -27,11 +38,15 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.snapshotFlow
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
 import com.cgens67.innertube.YouTube.SearchFilter.Companion.FILTER_ALBUM
@@ -57,7 +72,6 @@ import com.cgens67.avidtune.playback.queues.YouTubeQueue
 import com.cgens67.avidtune.ui.component.ChipsRow
 import com.cgens67.avidtune.ui.component.EmptyPlaceholder
 import com.cgens67.avidtune.ui.component.LocalMenuState
-import com.cgens67.avidtune.ui.component.NavigationTitle
 import com.cgens67.avidtune.ui.component.YouTubeListItem
 import com.cgens67.avidtune.ui.component.shimmer.ListItemPlaceHolder
 import com.cgens67.avidtune.ui.component.shimmer.ShimmerHost
@@ -65,6 +79,7 @@ import com.cgens67.avidtune.ui.menu.YouTubeAlbumMenu
 import com.cgens67.avidtune.ui.menu.YouTubeArtistMenu
 import com.cgens67.avidtune.ui.menu.YouTubePlaylistMenu
 import com.cgens67.avidtune.ui.menu.YouTubeSongMenu
+import com.cgens67.innertube.pages.SearchSummary
 import com.cgens67.avidtune.viewmodels.OnlineSearchViewModel
 import kotlinx.coroutines.launch
 
@@ -92,6 +107,36 @@ fun OnlineSearchResult(
             }
         }
     }
+    val allModeSections =
+        buildList<SearchSummary> {
+            searchSummary?.summaries?.firstOrNull()?.takeIf { it.items.isNotEmpty() }?.let(::add)
+
+            listOf(
+                FILTER_SONG to stringResource(R.string.filter_songs),
+                FILTER_VIDEO to stringResource(R.string.filter_videos),
+                FILTER_ALBUM to stringResource(R.string.filter_albums),
+                FILTER_ARTIST to stringResource(R.string.filter_artists),
+                FILTER_COMMUNITY_PLAYLIST to stringResource(R.string.filter_community_playlists),
+                FILTER_FEATURED_PLAYLIST to stringResource(R.string.filter_featured_playlists),
+            ).forEach { (sectionFilter, sectionTitle) ->
+                viewModel.viewStateMap[sectionFilter.value]
+                    ?.items
+                    ?.takeIf { it.isNotEmpty() }
+                    ?.let { items ->
+                        add(SearchSummary(title = sectionTitle, items = items))
+                    }
+            }
+        }
+    val isAllModeLoaded =
+        searchSummary != null ||
+            listOf(
+                FILTER_SONG,
+                FILTER_VIDEO,
+                FILTER_ALBUM,
+                FILTER_ARTIST,
+                FILTER_COMMUNITY_PLAYLIST,
+                FILTER_FEATURED_PLAYLIST,
+            ).all { viewModel.viewStateMap.containsKey(it.value) }
 
     LaunchedEffect(lazyListState) {
         snapshotFlow {
@@ -139,11 +184,11 @@ fun OnlineSearchResult(
         YouTubeListItem(
             item = item,
             isActive =
-                when (item) {
-                    is SongItem -> mediaMetadata?.id == item.id
-                    is AlbumItem -> mediaMetadata?.album?.id == item.id
-                    else -> false
-                },
+            when (item) {
+                is SongItem -> mediaMetadata?.id == item.id
+                is AlbumItem -> mediaMetadata?.album?.id == item.id
+                else -> false
+            },
             isPlaying = isPlaying,
             trailingContent = {
                 IconButton(
@@ -156,56 +201,88 @@ fun OnlineSearchResult(
                 }
             },
             modifier =
-                Modifier
-                    .combinedClickable(
-                        onClick = {
-                            when (item) {
-                                is SongItem -> {
-                                    if (item.id == mediaMetadata?.id) {
-                                        playerConnection.player.togglePlayPause()
-                                    } else {
-                                        playerConnection.playQueue(
-                                            YouTubeQueue(
-                                                WatchEndpoint(videoId = item.id),
-                                                item.toMediaMetadata()
-                                            )
+            Modifier
+                .combinedClickable(
+                    onClick = {
+                        when (item) {
+                            is SongItem -> {
+                                if (item.id == mediaMetadata?.id) {
+                                    playerConnection.player.togglePlayPause()
+                                } else {
+                                    playerConnection.playQueue(
+                                        YouTubeQueue(
+                                            WatchEndpoint(videoId = item.id),
+                                            item.toMediaMetadata()
                                         )
-                                    }
+                                    )
                                 }
-
-                                is AlbumItem -> navController.navigate("album/${item.id}")
-                                is ArtistItem -> navController.navigate("artist/${item.id}")
-                                is PlaylistItem -> navController.navigate("online_playlist/${item.id}")
                             }
-                        },
-                        onLongClick = longClick,
-                    )
-                    .animateItem(),
+
+                            is AlbumItem -> navController.navigate("album/${item.id}")
+                            is ArtistItem -> navController.navigate("artist/${item.id}")
+                            is PlaylistItem -> navController.navigate("online_playlist/${item.id}")
+                        }
+                    },
+                    onLongClick = longClick,
+                )
+                .animateItem(),
         )
     }
 
     LazyColumn(
         state = lazyListState,
         contentPadding =
-            LocalPlayerAwareWindowInsets.current
-                .add(WindowInsets(top = SearchFilterHeight))
-                .add(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal))
-                .asPaddingValues(),
+        LocalPlayerAwareWindowInsets.current
+            .add(WindowInsets(top = SearchFilterHeight + 8.dp))
+            .asPaddingValues(),
     ) {
         if (searchFilter == null) {
-            searchSummary?.summaries?.forEach { summary ->
-                item {
-                    NavigationTitle(summary.title)
+            allModeSections.forEachIndexed { index, summary ->
+                if (index > 0) {
+                    item(key = "divider_$index") {
+                        HorizontalDivider(
+                            modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp),
+                            thickness = 0.5.dp,
+                            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)
+                        )
+                    }
                 }
 
-                items(
+                item(key = "section_header_${summary.title}_$index") {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .width(3.dp)
+                                .height(18.dp)
+                                .clip(RoundedCornerShape(2.dp))
+                                .background(MaterialTheme.colorScheme.primary)
+                        )
+                        Spacer(Modifier.width(10.dp))
+                        Text(
+                            text = summary.title,
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.onSurface,
+                        )
+                    }
+                }
+
+                itemsIndexed(
                     items = summary.items,
-                    key = { "${summary.title}/${it.id}" },
-                    itemContent = ytItemContent,
-                )
+                    key = { itemIndex, item -> "${summary.title}/${item.id}/$itemIndex" },
+                ) { _, item ->
+                    ytItemContent(item)
+                }
+
+                item(key = "section_spacer_${summary.title}_$index") {
+                    Spacer(Modifier.height(4.dp))
+                }
             }
 
-            if (searchSummary?.summaries?.isEmpty() == true) {
+            if (allModeSections.isEmpty() && isAllModeLoaded) {
                 item {
                     EmptyPlaceholder(
                         icon = R.drawable.search,
@@ -216,7 +293,7 @@ fun OnlineSearchResult(
         } else {
             items(
                 items = itemsPage?.items.orEmpty().distinctBy { it.id },
-                key = { it.id },
+                key = { "filtered_${it.id}" },
                 itemContent = ytItemContent,
             )
 
@@ -240,7 +317,7 @@ fun OnlineSearchResult(
             }
         }
 
-        if (searchFilter == null && searchSummary == null || searchFilter != null && itemsPage == null) {
+        if (searchFilter == null && allModeSections.isEmpty() && !isAllModeLoaded || searchFilter != null && itemsPage == null) {
             item {
                 ShimmerHost {
                     repeat(8) {
@@ -251,8 +328,16 @@ fun OnlineSearchResult(
         }
     }
 
-    ChipsRow(
-        chips =
+    Surface(
+        color = MaterialTheme.colorScheme.surface,
+        tonalElevation = 0.dp,
+        shadowElevation = 1.dp,
+        modifier = Modifier
+            .windowInsetsPadding(WindowInsets.systemBars.only(WindowInsetsSides.Top).add(WindowInsets(top = AppBarHeight)))
+            .fillMaxWidth()
+    ) {
+        ChipsRow(
+            chips =
             listOf(
                 null to stringResource(R.string.filter_all),
                 FILTER_SONG to stringResource(R.string.filter_songs),
@@ -262,23 +347,15 @@ fun OnlineSearchResult(
                 FILTER_COMMUNITY_PLAYLIST to stringResource(R.string.filter_community_playlists),
                 FILTER_FEATURED_PLAYLIST to stringResource(R.string.filter_featured_playlists),
             ),
-        currentValue = searchFilter,
-        onValueUpdate = {
-            if (viewModel.filter.value != it) {
-                viewModel.filter.value = it
+            currentValue = searchFilter,
+            onValueUpdate = {
+                if (viewModel.filter.value != it) {
+                    viewModel.filter.value = it
+                }
+                coroutineScope.launch {
+                    lazyListState.animateScrollToItem(0)
+                }
             }
-            coroutineScope.launch {
-                lazyListState.animateScrollToItem(0)
-            }
-        },
-        modifier =
-            Modifier
-                .background(MaterialTheme.colorScheme.surface)
-                .windowInsetsPadding(
-                    WindowInsets.safeDrawing
-                        .only(WindowInsetsSides.Horizontal + WindowInsetsSides.Top)
-                        .add(WindowInsets(top = AppBarHeight))
-                )
-                .fillMaxWidth()
-    )
+        )
+    }
 }
