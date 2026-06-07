@@ -93,7 +93,7 @@ fun PlaybackError(
     val fallbackTimeout = stringResource(R.string.error_timeout)
     val fallbackNoStream = "No stream"
     val retryText = stringResource(R.string.action_retry)
-    val copyText = "Copy"
+    val copyText = stringResource(android.R.string.copy)
     val copiedText = stringResource(R.string.copied)
     
     val errorInfo = remember(error, mediaId) { error.toPlaybackErrorInfo() }
