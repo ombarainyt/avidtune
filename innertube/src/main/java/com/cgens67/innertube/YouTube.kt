@@ -149,20 +149,32 @@ object YouTube {
                     ))
                 }
             } else if (content.itemSectionRenderer != null) {
-                val items = content.itemSectionRenderer.contents?.flatMap { itemSectionContent ->
-                    itemSectionContent.musicShelfRenderer?.contents?.getItems()?.mapNotNull {
-                        SearchSummaryPage.fromMusicResponsiveListItemRenderer(it)
-                    } ?: listOfNotNull(itemSectionContent.musicResponsiveListItemRenderer?.let {
-                        SearchSummaryPage.fromMusicResponsiveListItemRenderer(it)
-                    })
-                }?.distinctBy { it.id }.orEmpty()
+                content.itemSectionRenderer.contents?.forEach { itemSectionContent ->
+                    if (itemSectionContent.musicShelfRenderer != null) {
+                        val shelf = itemSectionContent.musicShelfRenderer
+                        val items = shelf.contents?.getItems()
+                            ?.mapNotNull { SearchSummaryPage.fromMusicResponsiveListItemRenderer(it) }
+                            ?.distinctBy { it.id }
+                            .orEmpty()
 
-                if (items.isNotEmpty()) {
-                    groupItemsByType(items).forEach { (type, groupedItems) ->
-                        summaries.add(SearchSummary(
-                            title = type,
-                            items = groupedItems
-                        ))
+                        if (items.isNotEmpty()) {
+                            summaries.add(SearchSummary(
+                                title = shelf.title?.runs?.firstOrNull()?.text ?: "Other",
+                                items = items
+                            ))
+                        }
+                    } else if (itemSectionContent.musicResponsiveListItemRenderer != null) {
+                        val item = SearchSummaryPage.fromMusicResponsiveListItemRenderer(itemSectionContent.musicResponsiveListItemRenderer)
+                        if (item != null) {
+                            val type = when (item) {
+                                is SongItem -> "Songs"
+                                is AlbumItem -> "Albums"
+                                is ArtistItem -> "Artists"
+                                is PlaylistItem -> "Playlists"
+                                else -> "Other"
+                            }
+                            summaries.add(SearchSummary(title = type, items = listOf(item)))
+                        }
                     }
                 }
             }
@@ -170,19 +182,6 @@ object YouTube {
 
         SearchSummaryPage(summaries = summaries)
     }
-
-    private fun groupItemsByType(items: List<YTItem>): Map<String, List<YTItem>> {
-        return items.groupBy {
-            when (it) {
-                is SongItem -> "Songs"
-                is AlbumItem -> "Albums"
-                is ArtistItem -> "Artists"
-                is PlaylistItem -> "Playlists"
-                else -> "Other"
-            }
-        }
-    }
-
 
     suspend fun search(query: String, filter: SearchFilter): Result<SearchResult> = runCatching {
         val response = innerTube.search(WEB_REMIX, query, filter.value).body<SearchResponse>()
