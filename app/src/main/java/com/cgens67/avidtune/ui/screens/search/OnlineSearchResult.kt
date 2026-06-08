@@ -41,7 +41,6 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.painterResource
@@ -102,6 +101,38 @@ fun OnlineSearchResult(
     val searchFilter by viewModel.filter.collectAsState()
     val searchSummary = viewModel.summaryPage
     
+    // Group identical categories together and sort them according to the requested order
+    val mergedSummaries = remember(searchSummary) {
+        searchSummary?.summaries
+            ?.groupBy { it.title }
+            ?.map { (title, summaries) ->
+                SearchSummary(
+                    title = title,
+                    items = summaries.flatMap { it.items }.distinctBy { it.id }
+                )
+            }
+            ?.sortedBy { summary ->
+                val title = summary.title.lowercase()
+                val isFirstFromApi = searchSummary.summaries.firstOrNull()?.title == summary.title
+                
+                // Priority Mapping: 1=Top Result, 2=Songs, 3=Videos, 4=Albums, 5=Artists, 6=Playlists, 7=Other
+                when {
+                    title.contains("top") || title.contains("principal") || title.contains("result") || title.contains("resultado") -> 1
+                    title.contains("song") || title.contains("cancion") || title.contains("canción") -> 2
+                    title.contains("video") -> 3
+                    title.contains("album") || title.contains("álbum") -> 4
+                    title.contains("artist") || title.contains("artista") -> 5
+                    title.contains("playlist") || title.contains("lista") -> 6
+                    isFirstFromApi -> 1 // Fallback if API returned it first but it's localized differently
+                    summary.items.firstOrNull() is SongItem -> 2
+                    summary.items.firstOrNull() is AlbumItem -> 4
+                    summary.items.firstOrNull() is ArtistItem -> 5
+                    summary.items.firstOrNull() is PlaylistItem -> 6
+                    else -> 7
+                }
+            }
+    }
+    
     val itemsPage by remember(searchFilter) {
         derivedStateOf {
             searchFilter?.value?.let {
@@ -109,80 +140,6 @@ fun OnlineSearchResult(
             }
         }
     }
-
-    val filterSongsTitle = stringResource(R.string.filter_songs)
-    val filterVideosTitle = stringResource(R.string.filter_videos)
-    val filterAlbumsTitle = stringResource(R.string.filter_albums)
-    val filterArtistsTitle = stringResource(R.string.filter_artists)
-    val filterPlaylistsTitle = stringResource(R.string.filter_playlists)
-
-    // Reconstruct sections extracting actual contents and keeping strict priority
-    val allModeSections = remember(searchSummary, itemsPage) {
-        if (searchSummary == null) return@remember emptyList<SearchSummary>()
-
-        val allItems = searchSummary.summaries.flatMap { it.items }.distinctBy { it.id }
-        
-        // Ensure the absolute first item returned retains its "Top result" priority
-        val firstSummaryTitle = searchSummary.summaries.firstOrNull()?.title ?: ""
-        val topResultItems = searchSummary.summaries.firstOrNull()?.items ?: emptyList()
-
-        val remainingFromSummary = allItems.filterNot { it.id in topResultItems.map { t -> t.id } }
-
-        // Analyze specific YouTube music video types to separate regular songs from videos
-        val songs = remainingFromSummary.filterIsInstance<SongItem>().filter {
-            val type = it.endpoint?.watchEndpointMusicSupportedConfigs?.watchEndpointMusicConfig?.musicVideoType
-            type != "MUSIC_VIDEO_TYPE_OMV" && type != "MUSIC_VIDEO_TYPE_UGC"
-        }.toMutableList()
-        
-        val videos = remainingFromSummary.filterIsInstance<SongItem>().filter {
-            val type = it.endpoint?.watchEndpointMusicSupportedConfigs?.watchEndpointMusicConfig?.musicVideoType
-            type == "MUSIC_VIDEO_TYPE_OMV" || type == "MUSIC_VIDEO_TYPE_UGC"
-        }.toMutableList()
-
-        val albums = remainingFromSummary.filterIsInstance<AlbumItem>().toMutableList()
-        val artists = remainingFromSummary.filterIsInstance<ArtistItem>().toMutableList()
-        val playlists = remainingFromSummary.filterIsInstance<PlaylistItem>().toMutableList()
-
-        // Append any cached items loaded directly from the specific tabs ("Original logic")
-        viewModel.viewStateMap[FILTER_SONG.value]?.items?.filterIsInstance<SongItem>()?.let { songs.addAll(it) }
-        viewModel.viewStateMap[FILTER_VIDEO.value]?.items?.filterIsInstance<SongItem>()?.let { videos.addAll(it) }
-        viewModel.viewStateMap[FILTER_ALBUM.value]?.items?.filterIsInstance<AlbumItem>()?.let { albums.addAll(it) }
-        viewModel.viewStateMap[FILTER_ARTIST.value]?.items?.filterIsInstance<ArtistItem>()?.let { artists.addAll(it) }
-        viewModel.viewStateMap[FILTER_COMMUNITY_PLAYLIST.value]?.items?.filterIsInstance<PlaylistItem>()?.let { playlists.addAll(it) }
-        viewModel.viewStateMap[FILTER_FEATURED_PLAYLIST.value]?.items?.filterIsInstance<PlaylistItem>()?.let { playlists.addAll(it) }
-
-        buildList {
-            if (topResultItems.isNotEmpty()) {
-                add(SearchSummary(title = firstSummaryTitle, items = topResultItems.distinctBy { it.id }))
-            }
-            if (songs.isNotEmpty()) {
-                add(SearchSummary(title = filterSongsTitle, items = songs.distinctBy { it.id }))
-            }
-            if (videos.isNotEmpty()) {
-                add(SearchSummary(title = filterVideosTitle, items = videos.distinctBy { it.id }))
-            }
-            if (albums.isNotEmpty()) {
-                add(SearchSummary(title = filterAlbumsTitle, items = albums.distinctBy { it.id }))
-            }
-            if (artists.isNotEmpty()) {
-                add(SearchSummary(title = filterArtistsTitle, items = artists.distinctBy { it.id }))
-            }
-            if (playlists.isNotEmpty()) {
-                add(SearchSummary(title = filterPlaylistsTitle, items = playlists.distinctBy { it.id }))
-            }
-        }
-    }
-
-    val isAllModeLoaded =
-        searchSummary != null ||
-            listOf(
-                FILTER_SONG,
-                FILTER_VIDEO,
-                FILTER_ALBUM,
-                FILTER_ARTIST,
-                FILTER_COMMUNITY_PLAYLIST,
-                FILTER_FEATURED_PLAYLIST,
-            ).all { viewModel.viewStateMap.containsKey(it.value) }
 
     LaunchedEffect(lazyListState) {
         snapshotFlow {
@@ -283,7 +240,7 @@ fun OnlineSearchResult(
             .asPaddingValues(),
     ) {
         if (searchFilter == null) {
-            allModeSections.forEachIndexed { index, summary ->
+            mergedSummaries?.forEachIndexed { index, summary ->
                 if (index > 0) {
                     item(key = "divider_$index") {
                         HorizontalDivider(
@@ -328,7 +285,7 @@ fun OnlineSearchResult(
                 }
             }
 
-            if (allModeSections.isEmpty() && isAllModeLoaded) {
+            if (mergedSummaries?.isEmpty() == true) {
                 item {
                     EmptyPlaceholder(
                         icon = R.drawable.search,
@@ -363,7 +320,7 @@ fun OnlineSearchResult(
             }
         }
 
-        if (searchFilter == null && allModeSections.isEmpty() && !isAllModeLoaded || searchFilter != null && itemsPage == null) {
+        if (searchFilter == null && searchSummary == null || searchFilter != null && itemsPage == null) {
             item {
                 ShimmerHost {
                     repeat(8) {
@@ -401,7 +358,7 @@ fun OnlineSearchResult(
                 coroutineScope.launch {
                     lazyListState.animateScrollToItem(0)
                 }
-            },
+            }
         )
     }
 }
