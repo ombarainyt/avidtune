@@ -101,7 +101,7 @@ fun OnlineSearchResult(
     val searchFilter by viewModel.filter.collectAsState()
     val searchSummary = viewModel.summaryPage
     
-    // Group identical categories together to prevent duplicated separate items
+    // Group identical categories together and sort them according to the requested order
     val mergedSummaries = remember(searchSummary) {
         searchSummary?.summaries
             ?.groupBy { it.title }
@@ -110,6 +110,26 @@ fun OnlineSearchResult(
                     title = title,
                     items = summaries.flatMap { it.items }.distinctBy { it.id }
                 )
+            }
+            ?.sortedBy { summary ->
+                val title = summary.title.lowercase()
+                val isFirstFromApi = searchSummary.summaries.firstOrNull()?.title == summary.title
+                
+                // Priority Mapping: 1=Top Result, 2=Songs, 3=Videos, 4=Albums, 5=Artists, 6=Playlists, 7=Other
+                when {
+                    title.contains("top") || title.contains("principal") || title.contains("result") || title.contains("resultado") -> 1
+                    title.contains("song") || title.contains("cancion") || title.contains("canción") -> 2
+                    title.contains("video") -> 3
+                    title.contains("album") || title.contains("álbum") -> 4
+                    title.contains("artist") || title.contains("artista") -> 5
+                    title.contains("playlist") || title.contains("lista") -> 6
+                    isFirstFromApi -> 1 // Fallback if API returned it first but it's localized differently
+                    summary.items.firstOrNull() is SongItem -> 2
+                    summary.items.firstOrNull() is AlbumItem -> 4
+                    summary.items.firstOrNull() is ArtistItem -> 5
+                    summary.items.firstOrNull() is PlaylistItem -> 6
+                    else -> 7
+                }
             }
     }
     
