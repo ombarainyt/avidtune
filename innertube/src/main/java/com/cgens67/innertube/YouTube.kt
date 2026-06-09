@@ -164,16 +164,20 @@ object YouTube {
                             ))
                         }
                     } else if (itemSectionContent.musicResponsiveListItemRenderer != null) {
-                        val item = SearchSummaryPage.fromMusicResponsiveListItemRenderer(itemSectionContent.musicResponsiveListItemRenderer)
+                        val renderer = itemSectionContent.musicResponsiveListItemRenderer
+                        val item = SearchSummaryPage.fromMusicResponsiveListItemRenderer(renderer)
                         if (item != null) {
-                            val type = when (item) {
-                                is SongItem -> "Songs"
-                                is AlbumItem -> "Albums"
-                                is ArtistItem -> "Artists"
-                                is PlaylistItem -> "Playlists"
+                            val isVideo = renderer.overlay?.musicItemThumbnailOverlayRenderer?.content?.musicPlayButtonRenderer?.playNavigationEndpoint?.watchEndpoint?.watchEndpointMusicSupportedConfigs?.watchEndpointMusicConfig?.musicVideoType in listOf("MUSIC_VIDEO_TYPE_UGC", "MUSIC_VIDEO_TYPE_OMV")
+                            val type = when {
+                                isVideo -> "Videos"
+                                item is SongItem -> "Songs"
+                                item is AlbumItem -> "Albums"
+                                item is ArtistItem -> "Artists"
+                                item is PlaylistItem -> "Playlists"
                                 else -> "Other"
                             }
-                            summaries.add(SearchSummary(title = type, items = listOf(item)))
+                            val finalTitle = if (summaries.isEmpty()) "Top result" else type
+                            summaries.add(SearchSummary(title = finalTitle, items = listOf(item)))
                         }
                     }
                 }
