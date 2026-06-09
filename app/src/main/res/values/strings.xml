@@ -897,4 +897,10 @@
     <string name="loading">Loading...</string>
     <string name="error">Error</string>
     <string name="could_not_load_article">Could not load article</string>
+    
+    <!-- SponsorBlock setting -->
+    <string name="enable_sponsorblock">Enable SponsorBlock</string>
+    <string name="enable_sponsorblock_desc">Automatically skip non-music parts, intros, and sponsorships in music videos</string>
+    <string name="skipped_sponsor">Skipped segment (SponsorBlock)</string>
+
 </resources>
