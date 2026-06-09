@@ -167,8 +167,14 @@ object YouTube {
                         val renderer = itemSectionContent.musicResponsiveListItemRenderer
                         val item = SearchSummaryPage.fromMusicResponsiveListItemRenderer(renderer)
                         if (item != null) {
-                            val isVideo = renderer.overlay?.musicItemThumbnailOverlayRenderer?.content?.musicPlayButtonRenderer?.playNavigationEndpoint?.watchEndpoint?.watchEndpointMusicSupportedConfigs?.watchEndpointMusicConfig?.musicVideoType in listOf("MUSIC_VIDEO_TYPE_UGC", "MUSIC_VIDEO_TYPE_OMV")
+                            val videoType = renderer.overlay?.musicItemThumbnailOverlayRenderer?.content?.musicPlayButtonRenderer?.playNavigationEndpoint?.watchEndpoint?.watchEndpointMusicSupportedConfigs?.watchEndpointMusicConfig?.musicVideoType
+                            val firstRunText = renderer.flexColumns.getOrNull(1)?.musicResponsiveListItemFlexColumnRenderer?.text?.runs?.firstOrNull()?.text
+                            
+                            val isVideo = videoType in listOf("MUSIC_VIDEO_TYPE_UGC", "MUSIC_VIDEO_TYPE_OMV") || firstRunText in listOf("Video", "Vídeo")
+                            val isEpisode = videoType == "MUSIC_VIDEO_TYPE_PODCAST_EPISODE" || firstRunText in listOf("Episode", "Episodio")
+                            
                             val type = when {
+                                isEpisode -> "Episodes"
                                 isVideo -> "Videos"
                                 item is SongItem -> "Songs"
                                 item is AlbumItem -> "Albums"
