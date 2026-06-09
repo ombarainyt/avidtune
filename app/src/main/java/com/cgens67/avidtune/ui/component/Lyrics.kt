@@ -246,6 +246,9 @@ fun Lyrics(
     val scope = rememberCoroutineScope()
     val database = LocalDatabase.current
 
+    val currentSkipSegments by playerConnection.currentSkipSegments.collectAsState()
+    val sponsorBlockEnabled by playerConnection.sponsorBlockEnabled.collectAsState()
+
     val isFullscreen = onNavigateBack != null
     val sliderStyle by rememberEnumPreference(SliderStyleKey, SliderStyle.DEFAULT)
     val landscapeOffset = configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
@@ -747,7 +750,7 @@ fun Lyrics(
         }
     }
 
-    LaunchedEffect(originalLyrics, lyricsOffsetMs) {
+    LaunchedEffect(originalLyrics, lyricsOffsetMs, currentSkipSegments, sponsorBlockEnabled) {
         if (originalLyrics.isNullOrEmpty() || !originalLyrics.startsWith("[")) {
             currentLineIndex = -1
             currentMainLineIndex = -1
@@ -757,9 +760,22 @@ fun Lyrics(
             delay(50)
             val sliderPos = sliderPositionProvider()
             isSeeking = sliderPos != null
+            val basePosition = sliderPos ?: playerConnection.player.currentPosition
+            
+            var sponsorBlockOffset = 0L
+            if (sponsorBlockEnabled) {
+                for (segment in currentSkipSegments) {
+                    if (basePosition >= segment.second) {
+                        sponsorBlockOffset += (segment.second - segment.first)
+                    } else if (basePosition > segment.first) {
+                        sponsorBlockOffset += (basePosition - segment.first)
+                    }
+                }
+            }
+            
             val rawIndex = findCurrentLineIndex(
                 lines,
-                (sliderPos ?: playerConnection.player.currentPosition) + lyricsOffsetMs
+                basePosition - sponsorBlockOffset + lyricsOffsetMs
             )
             currentLineIndex = rawIndex
 
@@ -1157,7 +1173,15 @@ fun Lyrics(
                                                 }
                                             }
                                         } else if (isSynced && changeLyrics) {
-                                            playerConnection.player.seekTo(item.time)
+                                            var targetVideoTime = item.time - lyricsOffsetMs
+                                            if (sponsorBlockEnabled) {
+                                                for (segment in currentSkipSegments) {
+                                                    if (targetVideoTime >= segment.first) {
+                                                        targetVideoTime += (segment.second - segment.first)
+                                                    }
+                                                }
+                                            }
+                                            playerConnection.player.seekTo(targetVideoTime)
                                             scope.launch {
                                                 performSmoothPageScroll(index, 1500)
                                             }
@@ -1179,6 +1203,8 @@ fun Lyrics(
                                     isAutoScrollActive = isAutoScrollEnabled,
                                     animateLyrics = animateLyrics,
                                     lyricsOffset = lyricsOffsetMs,
+                                    currentSkipSegments = currentSkipSegments,
+                                    sponsorBlockEnabled = sponsorBlockEnabled,
                                     modifier = Modifier
                                 )
 
@@ -1193,7 +1219,9 @@ fun Lyrics(
                                             gapEnd = nextItem.time,
                                             playerConnection = playerConnection,
                                             lyricsOffset = lyricsOffsetMs,
-                                            color = expressiveAccent
+                                            color = expressiveAccent,
+                                            currentSkipSegments = currentSkipSegments,
+                                            sponsorBlockEnabled = sponsorBlockEnabled
                                         )
                                     }
                                 }
@@ -1796,11 +1824,13 @@ fun GapIndicator(
     gapEnd: Long,
     playerConnection: PlayerConnection,
     lyricsOffset: Long,
-    color: Color
+    color: Color,
+    currentSkipSegments: List<Pair<Long, Long>> = emptyList(),
+    sponsorBlockEnabled: Boolean = false
 ) {
     var smoothPosition by remember { mutableLongStateOf(gapStart) }
 
-    LaunchedEffect(Unit) {
+    LaunchedEffect(Unit, currentSkipSegments, sponsorBlockEnabled) {
         var lastPlayerPos = playerConnection.player.currentPosition
         var lastUpdateTime = System.currentTimeMillis()
         while (isActive) {
@@ -1812,7 +1842,20 @@ fun GapIndicator(
                     lastUpdateTime = now
                 }
                 val elapsed = now - lastUpdateTime
-                smoothPosition = lastPlayerPos + lyricsOffset + (if (playerConnection.player.isPlaying) elapsed else 0)
+                val currentVideoPos = lastPlayerPos + (if (playerConnection.player.isPlaying) elapsed else 0)
+                
+                var sponsorBlockOffset = 0L
+                if (sponsorBlockEnabled) {
+                    for (segment in currentSkipSegments) {
+                        if (currentVideoPos >= segment.second) {
+                            sponsorBlockOffset += (segment.second - segment.first)
+                        } else if (currentVideoPos > segment.first) {
+                            sponsorBlockOffset += (currentVideoPos - segment.first)
+                        }
+                    }
+                }
+                
+                smoothPosition = currentVideoPos - sponsorBlockOffset + lyricsOffset
             }
         }
     }
