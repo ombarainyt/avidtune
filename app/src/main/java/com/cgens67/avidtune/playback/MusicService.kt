@@ -84,6 +84,7 @@ import com.cgens67.avidtune.constants.RepeatModeKey
 import com.cgens67.avidtune.constants.ShowLyricsKey
 import com.cgens67.avidtune.constants.SimilarContent
 import com.cgens67.avidtune.constants.SkipSilenceKey
+import com.cgens67.avidtune.constants.SponsorBlockEnabledKey
 import com.cgens67.avidtune.db.MusicDatabase
 import com.cgens67.avidtune.db.entities.Event
 import com.cgens67.avidtune.db.entities.FormatEntity
@@ -357,6 +358,53 @@ class MusicService :
             .collectLatest(scope) {
                 player.skipSilenceEnabled = it
             }
+
+        var sponsorBlockEnabled = true
+        var currentSkipSegments = emptyList<Pair<Long, Long>>()
+        var lastSkippedSegment: Pair<Long, Long>? = null
+
+        dataStore.data
+            .map { it[SponsorBlockEnabledKey] ?: true }
+            .distinctUntilChanged()
+            .collectLatest(scope) {
+                sponsorBlockEnabled = it
+            }
+
+        currentMediaMetadata.distinctUntilChangedBy { it?.id }.collectLatest(scope) { metadata ->
+            currentSkipSegments = emptyList()
+            lastSkippedSegment = null
+            if (metadata != null && sponsorBlockEnabled) {
+                val segments = withContext(Dispatchers.IO) {
+                    com.cgens67.avidtune.models.SponsorBlock.getSkipSegments(metadata.id)
+                }
+                if (segments != null) {
+                    currentSkipSegments = segments.filter { it.actionType == "skip" }.map {
+                        (it.segment[0] * 1000).toLong() to (it.segment[1] * 1000).toLong()
+                    }
+                }
+            }
+        }
+
+        scope.launch(Dispatchers.Main) {
+            while (isActive) {
+                delay(200)
+                if (sponsorBlockEnabled && player.isPlaying && currentSkipSegments.isNotEmpty()) {
+                    val currentPos = player.currentPosition
+                    val segmentToSkip = currentSkipSegments.find { (start, end) ->
+                        currentPos in start..(end - 100)
+                    }
+                    if (segmentToSkip != null && segmentToSkip != lastSkippedSegment) {
+                        player.seekTo(segmentToSkip.second)
+                        lastSkippedSegment = segmentToSkip
+                        android.widget.Toast.makeText(this@MusicService, R.string.skipped_sponsor, android.widget.Toast.LENGTH_SHORT).show()
+                    }
+
+                    if (lastSkippedSegment != null && currentPos !in (lastSkippedSegment!!.first - 2000)..(lastSkippedSegment!!.second + 2000)) {
+                        lastSkippedSegment = null
+                    }
+                }
+            }
+        }
 
         combine(
             currentFormat,
