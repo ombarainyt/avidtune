@@ -215,40 +215,6 @@ data class SearchSummaryPage(
                 }
             }
             return when {
-                renderer.isSong -> {
-                    SongItem(
-                        id = renderer.videoId ?: return null,
-                        title =
-                            renderer.flexColumns
-                                .firstOrNull()
-                                ?.musicResponsiveListItemFlexColumnRenderer
-                                ?.text
-                                ?.runs
-                                ?.firstOrNull()
-                                ?.text ?: return null,
-                        artists =
-                            if (artist.isEmpty()) {
-                                secondaryLine.getOrNull(0)?.oddElements()?.map {
-                                    Artist(name = it.text, id = it.navigationEndpoint?.browseEndpoint?.browseId)
-                                } ?: return null
-                            } else {
-                                artist
-                            },
-                        album = album,
-                        duration =
-                            secondaryLine
-                                .lastOrNull()
-                                ?.firstOrNull()
-                                ?.text
-                                ?.parseTime(),
-                        thumbnail = renderer.thumbnail?.musicThumbnailRenderer?.getThumbnailUrl() ?: return null,
-                        explicit =
-                            renderer.badges?.find {
-                                it.musicInlineBadgeRenderer?.icon?.iconType == "MUSIC_EXPLICIT_BADGE"
-                            } != null,
-                    )
-                }
-
                 renderer.isArtist -> {
                     ArtistItem(
                         id = renderer.navigationEndpoint?.browseEndpoint?.browseId ?: return null,
@@ -372,6 +338,40 @@ data class SearchSummaryPage(
                                 ?.menuNavigationItemRenderer
                                 ?.navigationEndpoint
                                 ?.watchPlaylistEndpoint ?: return null,
+                    )
+                }
+
+                renderer.isSong -> {
+                    SongItem(
+                        id = renderer.videoId ?: return null,
+                        title =
+                            renderer.flexColumns
+                                .firstOrNull()
+                                ?.musicResponsiveListItemFlexColumnRenderer
+                                ?.text
+                                ?.runs
+                                ?.firstOrNull()
+                                ?.text ?: return null,
+                        artists =
+                            if (artist.isEmpty()) {
+                                secondaryLine.getOrNull(0)?.oddElements()?.map {
+                                    Artist(name = it.text, id = it.navigationEndpoint?.browseEndpoint?.browseId)
+                                } ?: return null
+                            } else {
+                                artist
+                            },
+                        album = album,
+                        duration =
+                            secondaryLine
+                                .lastOrNull()
+                                ?.firstOrNull()
+                                ?.text
+                                ?.parseTime(),
+                        thumbnail = renderer.thumbnail?.musicThumbnailRenderer?.getThumbnailUrl() ?: return null,
+                        explicit =
+                            renderer.badges?.find {
+                                it.musicInlineBadgeRenderer?.icon?.iconType == "MUSIC_EXPLICIT_BADGE"
+                            } != null,
                     )
                 }
 
