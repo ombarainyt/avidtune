@@ -539,7 +539,7 @@ class MusicService :
             .build()
     }
 
-    @RequiresApi(Build.VERSION.CODES.O)
+    @RequiresApi(Build.VERSION_CODES.O)
     private fun handleAudioFocusChange(focusChange: Int) {
         when (focusChange) {
             AudioManager.AUDIOFOCUS_GAIN -> {
