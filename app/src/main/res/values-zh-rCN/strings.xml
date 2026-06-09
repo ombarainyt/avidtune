@@ -886,4 +886,6 @@
     <string name="enable_sponsorblock">启用 SponsorBlock</string>
     <string name="enable_sponsorblock_desc">自动跳过音乐视频中的非音乐片段、前奏和赞助内容</string>
     <string name="skipped_sponsor">已跳过片段 (SponsorBlock)</string>
+    
+    <string name="fallback_artist_desc">%1$s 是一位歌手。</string>
 </resources>
