@@ -5,6 +5,7 @@ import com.cgens67.innertube.models.AlbumItem
 import com.cgens67.innertube.models.Artist
 import com.cgens67.innertube.models.ArtistItem
 import com.cgens67.innertube.models.MusicResponsiveListItemRenderer
+import com.cgens67.innertube.models.PlaylistItem
 import com.cgens67.innertube.models.SongItem
 import com.cgens67.innertube.models.YTItem
 import com.cgens67.innertube.models.oddElements
@@ -93,6 +94,11 @@ object SearchSuggestionPage {
                 )
             }
             renderer.isSong -> {
+                val secondaryLine = renderer.flexColumns.getOrNull(1)?.musicResponsiveListItemFlexColumnRenderer?.text?.runs?.splitBySeparator()
+                val firstRunText = secondaryLine?.firstOrNull()?.firstOrNull()?.text
+                val isVideoOrEpisode = firstRunText in listOf("Episode", "Episodio", "Video", "Vídeo")
+                val fallbackIndex = if (isVideoOrEpisode && (secondaryLine?.size ?: 0) > 1) 1 else 0
+
                 SongItem(
                     id = renderer.videoId ?: return null,
                     title =
@@ -104,34 +110,13 @@ object SearchSuggestionPage {
                             ?.firstOrNull()
                             ?.text ?: return null,
                     artists =
-                        renderer.flexColumns
-                            .getOrNull(1)
-                            ?.musicResponsiveListItemFlexColumnRenderer
-                            ?.text
-                            ?.runs
-                            ?.splitBySeparator()
-                            ?.getOrNull(1)
-                            ?.oddElements()
-                            ?.map {
-                                Artist(
-                                    name = it.text,
-                                    id = it.navigationEndpoint?.browseEndpoint?.browseId,
-                                )
-                            } ?: return null,
+                        secondaryLine?.getOrNull(fallbackIndex)?.oddElements()?.map {
+                            Artist(name = it.text, id = it.navigationEndpoint?.browseEndpoint?.browseId)
+                        } ?: return null,
                     album =
-                        renderer.flexColumns
-                            .getOrNull(
-                                2,
-                            )?.musicResponsiveListItemFlexColumnRenderer
-                            ?.text
-                            ?.runs
-                            ?.firstOrNull()
-                            ?.let {
-                                Album(
-                                    name = it.text,
-                                    id = it.navigationEndpoint?.browseEndpoint?.browseId ?: return null,
-                                )
-                            },
+                        secondaryLine?.getOrNull(fallbackIndex + 1)?.firstOrNull()?.takeIf { it.navigationEndpoint?.browseEndpoint != null }?.let {
+                            Album(name = it.text, id = it.navigationEndpoint?.browseEndpoint?.browseId!!)
+                        },
                     duration = null,
                     thumbnail = renderer.thumbnail?.musicThumbnailRenderer?.getThumbnailUrl() ?: return null,
                     explicit =
