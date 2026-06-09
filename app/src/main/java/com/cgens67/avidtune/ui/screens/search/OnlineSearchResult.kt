@@ -115,20 +115,21 @@ fun OnlineSearchResult(
                 val title = summary.title.lowercase()
                 val isFirstFromApi = searchSummary.summaries.firstOrNull()?.title == summary.title
                 
-                // Priority Mapping: 1=Top Result, 2=Songs, 3=Videos, 4=Albums, 5=Artists, 6=Playlists, 7=Other
+                // Priority Mapping: 1=Top Result, 2=Songs, 3=Videos, 4=Episodes/Podcasts, 5=Albums, 6=Artists, 7=Playlists, 8=Other
                 when {
                     title.contains("top") || title.contains("principal") || title.contains("result") || title.contains("resultado") -> 1
                     title.contains("song") || title.contains("cancion") || title.contains("canción") -> 2
                     title.contains("video") -> 3
-                    title.contains("album") || title.contains("álbum") -> 4
-                    title.contains("artist") || title.contains("artista") -> 5
-                    title.contains("playlist") || title.contains("lista") -> 6
+                    title.contains("episode") || title.contains("episodio") || title.contains("podcast") -> 4
+                    title.contains("album") || title.contains("álbum") -> 5
+                    title.contains("artist") || title.contains("artista") -> 6
+                    title.contains("playlist") || title.contains("lista") -> 7
                     isFirstFromApi -> 1 // Fallback if API returned it first but it's localized differently
                     summary.items.firstOrNull() is SongItem -> 2
-                    summary.items.firstOrNull() is AlbumItem -> 4
-                    summary.items.firstOrNull() is ArtistItem -> 5
-                    summary.items.firstOrNull() is PlaylistItem -> 6
-                    else -> 7
+                    summary.items.firstOrNull() is AlbumItem -> 5
+                    summary.items.firstOrNull() is ArtistItem -> 6
+                    summary.items.firstOrNull() is PlaylistItem -> 7
+                    else -> 8
                 }
             }
     }
