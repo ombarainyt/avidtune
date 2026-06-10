@@ -97,6 +97,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -233,6 +234,8 @@ import java.net.URLDecoder
 import java.net.URLEncoder
 import javax.inject.Inject
 
+// El codigo original de la aplicacion pertenece a : Arturo Cervantes Galindo (cgens67) Cualquier parecido es copia y pega de mi codigo original
+
 @Suppress("DEPRECATION", "ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
@@ -246,8 +249,6 @@ class MainActivity : ComponentActivity() {
     lateinit var syncUtils: SyncUtils
 
     private var playerConnection by mutableStateOf<PlayerConnection?>(null)
-    private var isServiceBound = false
-
     private val serviceConnection =
         object : ServiceConnection {
             override fun onServiceConnected(
@@ -255,7 +256,6 @@ class MainActivity : ComponentActivity() {
                 service: IBinder?,
             ) {
                 if (service is MusicBinder) {
-                    playerConnection?.dispose() // Clean up any existing connection
                     playerConnection =
                         PlayerConnection(this@MainActivity, service, database, lifecycleScope)
                 }
@@ -272,7 +272,7 @@ class MainActivity : ComponentActivity() {
     override fun onStart() {
         super.onStart()
         startService(Intent(this, MusicService::class.java))
-        isServiceBound = bindService(
+        bindService(
             Intent(this, MusicService::class.java),
             serviceConnection,
             Context.BIND_AUTO_CREATE
@@ -280,29 +280,20 @@ class MainActivity : ComponentActivity() {
     }
 
     override fun onStop() {
-        if (isServiceBound) {
-            try {
-                unbindService(serviceConnection)
-            } catch (e: Exception) {
-                e.printStackTrace()
-            }
-            isServiceBound = false
-        }
+        unbindService(serviceConnection)
         super.onStop()
     }
 
     override fun onDestroy() {
         super.onDestroy()
-        val wasPlaying = playerConnection?.isPlaying?.value == true
-        playerConnection?.dispose()
-        playerConnection = null
-
         if (dataStore.get(
                 StopMusicOnTaskClearKey,
                 false
-            ) && wasPlaying && isFinishing
+            ) && playerConnection?.isPlaying?.value == true && isFinishing
         ) {
             stopService(Intent(this, MusicService::class.java))
+            unbindService(serviceConnection)
+            playerConnection = null
         }
     }
 
