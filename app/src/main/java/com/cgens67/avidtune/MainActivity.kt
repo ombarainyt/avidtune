@@ -111,6 +111,8 @@ import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalConfiguration
@@ -128,6 +130,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.util.fastAny
 import androidx.compose.ui.util.fastFirstOrNull
 import androidx.compose.ui.util.fastForEach
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
 import androidx.core.net.toUri
