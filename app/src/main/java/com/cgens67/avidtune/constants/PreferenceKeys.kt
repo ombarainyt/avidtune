@@ -29,7 +29,7 @@ enum class SliderStyle {
 }
 
 enum class AppTextSize {
-    SMALL, SYSTEM, LARGE, EXTRA_LARGE
+    SMALL, SYSTEM, MEDIUM, LARGE, EXTRA_LARGE
 }
 
 const val SYSTEM_DEFAULT = "SYSTEM_DEFAULT"
