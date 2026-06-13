@@ -383,6 +383,7 @@ fun AppearanceSettings(
                         when (it) {
                             AppTextSize.SMALL -> stringResource(R.string.text_size_small)
                             AppTextSize.SYSTEM -> stringResource(R.string.text_size_system)
+                            AppTextSize.MEDIUM -> "Medium"
                             AppTextSize.LARGE -> stringResource(R.string.text_size_large)
                             AppTextSize.EXTRA_LARGE -> stringResource(R.string.text_size_extra_large)
                         }
