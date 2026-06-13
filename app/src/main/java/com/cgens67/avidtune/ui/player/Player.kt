@@ -987,6 +987,17 @@ fun PlayerSliderV4(
                 onValueChange = { onValueChange(it.toLong()) },
                 onValueChangeFinished = onValueChangeFinished,
                 thumb = { Spacer(modifier = Modifier.size(0.dp)) },
+                track = { sliderState ->
+                    PlayerSliderTrack(
+                        sliderState = sliderState,
+                        colors = SliderDefaults.colors(
+                            activeTrackColor = textBackgroundColor,
+                            inactiveTrackColor = textBackgroundColor.copy(alpha = 0.3f),
+                            thumbColor = textBackgroundColor
+                        ),
+                        trackHeight = 2.dp
+                    )
+                },
                 colors = SliderDefaults.colors(
                     activeTrackColor = textBackgroundColor,
                     inactiveTrackColor = textBackgroundColor.copy(alpha = 0.3f),
