@@ -1,4 +1,3 @@
-// app/src/main/java/com/cgens67/avidtune/ui/component/ChangelogButton.kt
 package com.cgens67.avidtune.ui.component
 
 import android.content.Context
@@ -21,7 +20,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -31,23 +29,21 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Error
 import androidx.compose.material3.ButtonGroupDefaults
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.ToggleButton
+import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.pulltorefresh.PullToRefreshDefaults
 import androidx.compose.material3.pulltorefresh.pullToRefresh
 import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
-import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -58,7 +54,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
@@ -67,11 +62,8 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
-import androidx.compose.ui.text.font.FontFamily
-import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
@@ -93,49 +85,10 @@ import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-fun ChangelogButton() {
-    var showBottomSheet by remember { mutableStateOf(false) }
-
-    SettingsCategoryItem(
-        title = { Text(stringResource(R.string.Changelog)) },
-        icon = painterResource(R.drawable.schedule),
-        onClick = { showBottomSheet = true }
-    )
-
-    if (showBottomSheet) {
-        ModalBottomSheet(
-            onDismissRequest = { showBottomSheet = false },
-            sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
-            containerColor = MaterialTheme.colorScheme.surface,
-            contentColor = MaterialTheme.colorScheme.onSurface,
-            dragHandle = {
-                Surface(
-                    modifier = Modifier
-                        .padding(vertical = 12.dp)
-                        .width(32.dp)
-                        .height(4.dp),
-                    shape = RoundedCornerShape(2.dp),
-                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
-                ) {}
-            }
-        ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 8.dp)
-            ) {
-                ChangelogScreen()
-                Spacer(Modifier.height(32.dp))
-            }
-        }
-    }
-}
-
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun ChangelogScreen(
+    onDismiss: () -> Unit = {},
     versionTag: String = "v${BuildConfig.VERSION_NAME}"
 ) {
     val context = LocalContext.current
@@ -149,11 +102,9 @@ fun ChangelogScreen(
     val coroutineScope = rememberCoroutineScope()
 
     var currentVersionTag by remember { mutableStateOf(versionTag) }
-    var availableReleases by remember {
-        mutableStateOf<List<ReleaseMetadata>>(
-            listOf(ReleaseMetadata(versionTag, versionTag, "Current", null))
-        )
-    }
+    var availableReleases by remember { mutableStateOf<List<ReleaseMetadata>>(
+        listOf(ReleaseMetadata(versionTag, versionTag, "Current", null))
+    ) }
     var isFetchingOldReleases by remember { mutableStateOf(false) }
 
     val pullToRefreshState = rememberPullToRefreshState()
@@ -182,7 +133,7 @@ fun ChangelogScreen(
                 } else {
                     val changelogUrl = URL("https://github.com/cgens67/AvidTune/releases/download/$tag/changelog.json")
                     val connection = changelogUrl.openConnection() as HttpURLConnection
-                    connection.setRequestProperty("User-Agent", "AvidTune-Changelog")
+                    connection.setRequestProperty("User-Agent", "AvidTune-Changelog-App")
                     connection.setRequestProperty("Accept", "application/json")
 
                     if (connection.responseCode == 200) {
@@ -211,6 +162,7 @@ fun ChangelogScreen(
                                         sections.add(ChangelogSection(title, items))
                                     }
                                 } else {
+                                    // Fallback: This is the old format (Array of Strings)
                                     val item = changelogArray.optString(i, "")
                                     if (item.isNotBlank()) {
                                         if (sections.isEmpty() || sections[0].title.isNotBlank()) {
@@ -225,9 +177,9 @@ fun ChangelogScreen(
                         saveChangelogToCache(context, tag, sections, imageUrl, desc, warning)
                         withContext(Dispatchers.Main) {
                             changelogSections = sections
-                            updateImage = imageUrl?.takeIf { it.isNotBlank() }
-                            updateDescription = desc?.takeIf { it.isNotBlank() }
-                            updateWarning = warning?.takeIf { it.isNotBlank() }
+                            updateImage = imageUrl.takeIf { !it.isNullOrBlank() }
+                            updateDescription = desc.takeIf { !it.isNullOrBlank() }
+                            updateWarning = warning.takeIf { !it.isNullOrBlank() }
                             isLoading = false
                             hasError = false
                             showingCached = false
@@ -254,7 +206,7 @@ fun ChangelogScreen(
             try {
                 val releasesUrl = URL("https://api.github.com/repos/cgens67/AvidTune/releases")
                 val connection = releasesUrl.openConnection() as HttpURLConnection
-                connection.setRequestProperty("User-Agent", "AvidTune-Changelog")
+                connection.setRequestProperty("User-Agent", "AvidTune-Changelog-App")
                 connection.setRequestProperty("Accept", "application/vnd.github+json")
 
                 if (connection.responseCode == 200) {
@@ -312,201 +264,209 @@ fun ChangelogScreen(
         fetchChangelog(currentVersionTag)
     }
 
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
-            .windowInsetsPadding(LocalPlayerAwareWindowInsets.current.only(WindowInsetsSides.Bottom))
-            .pullToRefresh(
-                state = pullToRefreshState,
-                isRefreshing = isRefreshing,
-                onRefresh = { fetchChangelog(currentVersionTag) }
+    Scaffold(
+        modifier = Modifier.pullToRefresh(
+            state = pullToRefreshState,
+            isRefreshing = isRefreshing,
+            onRefresh = { fetchChangelog(currentVersionTag) }
+        ),
+        topBar = {
+            TopAppBar(
+                title = { Text(stringResource(R.string.Changelog)) },
+                navigationIcon = {
+                    IconButton(onClick = onDismiss) {
+                        Icon(painterResource(R.drawable.arrow_back), null)
+                    }
+                },
+                scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior()
             )
-    ) {
-        Column(modifier = Modifier.fillMaxSize()) {
-            // Title Header
-            Text(
-                text = stringResource(R.string.changelogs),
-                style = MaterialTheme.typography.headlineMedium,
-                color = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.padding(horizontal = 8.dp)
-            )
-
-            // Version Selection Chips
-            if (availableReleases.isNotEmpty()) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 8.dp, vertical = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
+        }
+    ) { paddingValues ->
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(paddingValues)
+                .background(MaterialTheme.colorScheme.background)
+                .windowInsetsPadding(LocalPlayerAwareWindowInsets.current.only(WindowInsetsSides.Bottom))
+        ) {
+            Column(modifier = Modifier.fillMaxSize()) {
+                // Version Selection Chips
+                if (availableReleases.isNotEmpty()) {
                     Row(
                         modifier = Modifier
-                            .weight(1f)
-                            .horizontalScroll(rememberScrollState()),
-                        horizontalArrangement = Arrangement.spacedBy(ButtonGroupDefaults.ConnectedSpaceBetween),
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 8.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        availableReleases.forEachIndexed { index, release ->
-                            ToggleButton(
-                                checked = currentVersionTag == release.tagName,
-                                onCheckedChange = {
-                                    if (currentVersionTag != release.tagName) {
-                                        currentVersionTag = release.tagName
-                                    }
-                                },
-                                shapes = when {
-                                    availableReleases.size == 1 -> ButtonGroupDefaults.connectedLeadingButtonShapes()
-                                    index == 0 -> ButtonGroupDefaults.connectedLeadingButtonShapes()
-                                    index == availableReleases.lastIndex -> ButtonGroupDefaults.connectedTrailingButtonShapes()
-                                    else -> ButtonGroupDefaults.connectedMiddleButtonShapes()
-                                },
-                                modifier = Modifier.semantics { role = Role.RadioButton }
-                            ) {
-                                Text(
-                                    text = release.tagName,
-                                    style = MaterialTheme.typography.labelLarge
-                                )
-                            }
-                        }
-                    }
-                    if (isFetchingOldReleases) {
-                        CircularProgressIndicator(
+                        Row(
                             modifier = Modifier
-                                .padding(start = 8.dp)
-                                .size(24.dp),
-                            strokeWidth = 2.dp,
-                            color = MaterialTheme.colorScheme.primary
-                        )
-                    }
-                }
-            }
-
-            if (hasError && !isLoading) {
-                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Icon(Icons.Default.Error, null, tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(48.dp))
-                        Spacer(Modifier.height(16.dp))
-                        Text(stringResource(R.string.error_loading), color = MaterialTheme.colorScheme.error)
-                    }
-                }
-            } else {
-                Column(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .verticalScroll(rememberScrollState())
-                ) {
-                    if (isLoading && availableReleases.isEmpty()) {
-                        // Show nothing or a small loader while initial releases are fetching
-                    } else {
-                        Column(modifier = Modifier.padding(horizontal = 8.dp, vertical = 8.dp)) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Text(
-                                    text = currentVersionTag,
-                                    style = MaterialTheme.typography.titleLarge,
-                                    fontWeight = FontWeight.Bold,
-                                    color = MaterialTheme.colorScheme.primary
-                                )
-                                if (showingCached) {
-                                    Surface(color = MaterialTheme.colorScheme.primaryContainer, shape = RoundedCornerShape(8.dp)) {
-                                        Text("Cached", style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp))
-                                    }
+                                .weight(1f)
+                                .horizontalScroll(rememberScrollState()),
+                            horizontalArrangement = Arrangement.spacedBy(ButtonGroupDefaults.ConnectedSpaceBetween),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            availableReleases.forEachIndexed { index, release ->
+                                ToggleButton(
+                                    checked = currentVersionTag == release.tagName,
+                                    onCheckedChange = {
+                                        if (currentVersionTag != release.tagName) {
+                                            currentVersionTag = release.tagName
+                                        }
+                                    },
+                                    shapes = when {
+                                        availableReleases.size == 1 -> ButtonGroupDefaults.connectedLeadingButtonShapes()
+                                        index == 0 -> ButtonGroupDefaults.connectedLeadingButtonShapes()
+                                        index == availableReleases.lastIndex -> ButtonGroupDefaults.connectedTrailingButtonShapes()
+                                        else -> ButtonGroupDefaults.connectedMiddleButtonShapes()
+                                    },
+                                    modifier = Modifier.semantics { role = Role.RadioButton }
+                                ) {
+                                    Text(
+                                        text = release.tagName,
+                                        style = MaterialTheme.typography.labelLarge
+                                    )
                                 }
                             }
+                        }
+                        if (isFetchingOldReleases) {
+                            CircularProgressIndicator(
+                                modifier = Modifier
+                                    .padding(start = 8.dp)
+                                    .size(24.dp),
+                                strokeWidth = 2.dp,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                    }
+                }
 
-                            updateImage?.let { imageUrl ->
-                                Spacer(modifier = Modifier.height(16.dp))
-                                AsyncImage(
-                                    model = imageUrl,
-                                    contentDescription = null,
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .clip(RoundedCornerShape(12.dp)),
-                                    contentScale = ContentScale.FillWidth
-                                )
-                            }
-
-                            updateDescription?.let { desc ->
-                                Spacer(Modifier.height(16.dp))
-                                Text(desc, style = MaterialTheme.typography.bodyLarge)
-                            }
-
-                            if (changelogSections.isNotEmpty()) {
-                                changelogSections.forEach { section ->
-                                    if (section.title.isNotBlank()) {
-                                        Spacer(Modifier.height(16.dp))
-                                        Text(
-                                            text = section.title,
-                                            style = MaterialTheme.typography.titleMedium,
-                                            fontWeight = FontWeight.Bold,
-                                            color = MaterialTheme.colorScheme.primary
-                                        )
-                                        Spacer(Modifier.height(8.dp))
-                                    } else {
-                                        Spacer(Modifier.height(16.dp))
+                if (hasError && !isLoading) {
+                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Icon(Icons.Default.Error, null, tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(48.dp))
+                            Spacer(Modifier.height(16.dp))
+                            Text("Error loading changelog", color = MaterialTheme.colorScheme.error)
+                        }
+                    }
+                } else {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .verticalScroll(rememberScrollState())
+                    ) {
+                        if (isLoading && availableReleases.isEmpty()) {
+                            // Show nothing or a small loader while initial releases are fetching
+                        } else {
+                            Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        text = currentVersionTag,
+                                        style = MaterialTheme.typography.titleLarge,
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.primary
+                                    )
+                                    if (showingCached) {
+                                        Surface(color = MaterialTheme.colorScheme.primaryContainer, shape = RoundedCornerShape(8.dp)) {
+                                            Text("Cached", style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp))
+                                        }
                                     }
+                                }
 
-                                    section.items.forEach { item ->
-                                        val urls = item.extractUrls()
-                                        val annotatedText = buildAnnotatedString {
-                                            append(item.trim())
-                                            urls.forEach { (range, url) ->
-                                                addStringAnnotation("URL", url, range.first, range.last + 1)
-                                                addStyle(SpanStyle(color = MaterialTheme.colorScheme.primary, textDecoration = TextDecoration.Underline), range.first, range.last + 1)
+                                updateImage?.let { imageUrl ->
+                                    Spacer(modifier = Modifier.height(16.dp))
+                                    AsyncImage(
+                                        model = imageUrl,
+                                        contentDescription = null,
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .clip(RoundedCornerShape(12.dp)),
+                                        contentScale = ContentScale.FillWidth
+                                    )
+                                }
+
+                                updateDescription?.let { desc ->
+                                    Spacer(Modifier.height(16.dp))
+                                    Text(desc, style = MaterialTheme.typography.bodyLarge)
+                                }
+
+                                if (changelogSections.isNotEmpty()) {
+                                    changelogSections.forEach { section ->
+                                        if (section.title.isNotBlank()) {
+                                            Spacer(Modifier.height(16.dp))
+                                            Text(
+                                                text = section.title,
+                                                style = MaterialTheme.typography.titleMedium,
+                                                fontWeight = FontWeight.Bold,
+                                                color = MaterialTheme.colorScheme.primary
+                                            )
+                                            Spacer(Modifier.height(8.dp))
+                                        } else {
+                                            Spacer(Modifier.height(16.dp))
+                                        }
+
+                                        section.items.forEach { item ->
+                                            val urls = item.extractUrls()
+                                            val annotatedText = buildAnnotatedString {
+                                                append(item.trim())
+                                                urls.forEach { (range, url) ->
+                                                    addStringAnnotation("URL", url, range.first, range.last + 1)
+                                                    addStyle(SpanStyle(color = MaterialTheme.colorScheme.primary, textDecoration = TextDecoration.Underline), range.first, range.last + 1)
+                                                }
+                                            }
+                                            Row(modifier = Modifier.padding(vertical = 4.dp), verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                                                Box(modifier = Modifier
+                                                    .padding(top = 8.dp)
+                                                    .size(6.dp)
+                                                    .background(MaterialTheme.colorScheme.primary, CircleShape))
+                                                ClickableText(
+                                                    text = annotatedText,
+                                                    onClick = { offset ->
+                                                        annotatedText.getStringAnnotations("URL", offset, offset).firstOrNull()?.let {
+                                                            ContextCompat.startActivity(context, Intent(Intent.ACTION_VIEW, Uri.parse(it.item)), null)
+                                                        }
+                                                    },
+                                                    style = MaterialTheme.typography.bodyLarge.copy(color = MaterialTheme.colorScheme.onSurface)
+                                                )
                                             }
                                         }
-                                        Row(modifier = Modifier.padding(vertical = 4.dp), verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                                            Box(modifier = Modifier.padding(top = 8.dp).size(6.dp).background(MaterialTheme.colorScheme.primary, CircleShape))
-                                            ClickableText(
-                                                text = annotatedText,
-                                                onClick = { offset ->
-                                                    annotatedText.getStringAnnotations("URL", offset, offset).firstOrNull()?.let {
-                                                        ContextCompat.startActivity(context, Intent(Intent.ACTION_VIEW, Uri.parse(it.item)), null)
-                                                    }
-                                                },
-                                                style = MaterialTheme.typography.bodyLarge.copy(color = MaterialTheme.colorScheme.onSurface)
-                                            )
+                                    }
+                                }
+
+                                updateWarning?.let { warning ->
+                                    Spacer(Modifier.height(24.dp))
+                                    Surface(color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.2f), shape = RoundedCornerShape(12.dp)) {
+                                        Row(modifier = Modifier.padding(16.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                                            Icon(Icons.Default.Error, null, tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(20.dp))
+                                            Text(warning, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onErrorContainer)
                                         }
                                     }
                                 }
-                            }
 
-                            updateWarning?.let { warning ->
-                                Spacer(Modifier.height(24.dp))
-                                Surface(color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.2f), shape = RoundedCornerShape(12.dp)) {
-                                    Row(modifier = Modifier.padding(16.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                                        Icon(Icons.Default.Error, null, tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(20.dp))
-                                        Text(warning, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onErrorContainer)
-                                    }
-                                }
+                                Spacer(Modifier.height(32.dp))
                             }
-
-                            Spacer(Modifier.height(32.dp))
                         }
                     }
                 }
             }
-        }
 
-        // The Loading Indicator at the top center
-        Box(
-            Modifier
-                .align(Alignment.TopCenter)
-                .graphicsLayer {
-                    scaleX = scaleFraction()
-                    scaleY = scaleFraction()
-                }
-        ) {
-            PullToRefreshDefaults.LoadingIndicator(state = pullToRefreshState, isRefreshing = isRefreshing)
+            // The Loading Indicator at the top center
+            Box(
+                Modifier
+                    .align(Alignment.TopCenter)
+                    .graphicsLayer {
+                        scaleX = scaleFraction()
+                        scaleY = scaleFraction()
+                    }
+            ) {
+                PullToRefreshDefaults.LoadingIndicator(state = pullToRefreshState, isRefreshing = isRefreshing)
+            }
         }
     }
 }
-
-// --- Data Classes & Extensions ---
 
 data class ChangelogSection(val title: String, val items: List<String>)
 data class ReleaseMetadata(val tagName: String, val name: String, val date: String, val imageUrl: String?)
@@ -573,423 +533,6 @@ private fun loadChangelogFromCache(context: Context, versionTag: String): Cached
 }
 
 fun String.extractUrls(): List<Pair<IntRange, String>> {
-    val urlPattern = android.util.Patterns.WEB_URL
-    val matcher = urlPattern.matcher(this)
-    val result = mutableListOf<Pair<IntRange, String>>()
-    while (matcher.find()) {
-        result.add(IntRange(matcher.start(), matcher.end() - 1) to matcher.group())
-    }
-    return result
-}
-
-// --- ADVANCED MARKDOWN TEXT ---
-
-@Composable
-fun AdvancedMarkdownText(
-    markdown: String,
-    modifier: Modifier = Modifier,
-    style: androidx.compose.ui.text.TextStyle = MaterialTheme.typography.bodyMedium,
-    color: Color = MaterialTheme.colorScheme.onSurface
-) {
-    val cleanedMarkdown = cleanMarkdown(markdown)
-    val lines = cleanedMarkdown.lines()
-
-    var inCodeBlock by remember { mutableStateOf(false) }
-    var codeBlockContent by remember { mutableStateOf("") }
-    var codeBlockLanguage by remember { mutableStateOf("") }
-    var inList by remember { mutableStateOf(false) }
-    var listItems by remember { mutableStateOf(mutableListOf<String>()) }
-
-    Column(modifier = modifier) {
-        for ((index, line) in lines.withIndex()) {
-            val trimmedLine = line.trim()
-
-            when {
-                trimmedLine.startsWith("```") -> {
-                    if (inList) {
-                        ListContainer(listItems.toList())
-                        listItems.clear()
-                        inList = false
-                    }
-
-                    if (inCodeBlock) {
-                        CodeBlock(
-                            code = codeBlockContent.trimEnd(),
-                            language = codeBlockLanguage
-                        )
-                        codeBlockContent = ""
-                        codeBlockLanguage = ""
-                        inCodeBlock = false
-                    } else {
-                        codeBlockLanguage = trimmedLine.substring(3).trim()
-                        inCodeBlock = true
-                    }
-                }
-
-                inCodeBlock -> {
-                    codeBlockContent += line + "\n"
-                }
-
-                trimmedLine.matches(Regex("^#{1,6}\\s+.*")) -> {
-                    if (inList) {
-                        ListContainer(listItems.toList())
-                        listItems.clear()
-                        inList = false
-                    }
-
-                    val level = trimmedLine.takeWhile { it == '#' }.length
-                    val text = trimmedLine.substring(level).trim()
-                    HeaderText(text = text, level = level)
-                }
-
-                trimmedLine.matches(Regex("^[-*+]\\s+.*")) -> {
-                    val content = trimmedLine.substring(2).trim()
-                    if (!inList) {
-                        inList = true
-                        listItems.clear()
-                    }
-                    listItems.add(content)
-                }
-
-                trimmedLine.matches(Regex("^\\d+\\.\\s+.*")) -> {
-                    val content = trimmedLine.substringAfter(". ").trim()
-                    if (!inList) {
-                        inList = true
-                        listItems.clear()
-                    }
-                    listItems.add(content)
-                }
-
-                trimmedLine.startsWith("> ") -> {
-                    if (inList) {
-                        ListContainer(listItems.toList())
-                        listItems.clear()
-                        inList = false
-                    }
-                    BlockQuote(trimmedLine.substring(2))
-                }
-
-                trimmedLine.matches(Regex("^[-*_]{3,}$")) -> {
-                    if (inList) {
-                        ListContainer(listItems.toList())
-                        listItems.clear()
-                        inList = false
-                    }
-                    HorizontalRule()
-                }
-
-                trimmedLine.isEmpty() -> {
-                    if (inList) {
-                        ListContainer(listItems.toList())
-                        listItems.clear()
-                        inList = false
-                    }
-                    Spacer(modifier = Modifier.height(8.dp))
-                }
-
-                else -> {
-                    if (inList) {
-                        ListContainer(listItems.toList())
-                        listItems.clear()
-                        inList = false
-                    }
-                    FormattedText(trimmedLine, style = style, color = color)
-                }
-            }
-        }
-
-        if (inList && listItems.isNotEmpty()) {
-            ListContainer(listItems.toList())
-        }
-    }
-}
-
-private fun cleanMarkdown(markdown: String): String {
-    var cleaned = markdown
-
-    cleaned = cleaned.replace(Regex("<[^>]+>"), "")
-    cleaned = cleaned.replace(Regex("!\\[([^\\]]*)\\]\\([^)]*\\)"), "")
-    cleaned = cleaned.replace(Regex("\\[([^\\]]+)\\]\\([^)]*\\)")) { matchResult ->
-        matchResult.groupValues[1]
-    }
-    cleaned = cleaned.replace(Regex("\\[([^\\]]+)\\]\\[[^\\]]*\\]")) { matchResult ->
-        matchResult.groupValues[1]
-    }
-    cleaned = cleaned.replace(Regex("^\\[[^\\]]+\\]:.*$", RegexOption.MULTILINE), "")
-
-    val htmlEntities = mapOf(
-        "&amp;" to "&",
-        "&lt;" to "<",
-        "&gt;" to ">",
-        "&quot;" to "\"",
-        "&apos;" to "'",
-        "&nbsp;" to " ",
-        "&#39;" to "'",
-        "&#x27;" to "'",
-        "&hellip;" to "...",
-        "&mdash;" to "—",
-        "&ndash;" to "–"
-    )
-
-    for ((entity, replacement) in htmlEntities) {
-        cleaned = cleaned.replace(entity, replacement)
-    }
-
-    cleaned = cleaned.replace(Regex("\n{3,}"), "\n\n")
-    return cleaned.trim()
-}
-
-@Composable
-private fun HeaderText(text: String, level: Int) {
-    val style = when (level) {
-        1 -> MaterialTheme.typography.headlineLarge
-        2 -> MaterialTheme.typography.headlineMedium
-        3 -> MaterialTheme.typography.headlineSmall
-        4 -> MaterialTheme.typography.titleLarge
-        else -> MaterialTheme.typography.titleMedium
-    }
-
-    Text(
-        text = text,
-        style = style,
-        color = MaterialTheme.colorScheme.primary,
-        modifier = Modifier.padding(vertical = (12 - level * 2).coerceAtLeast(4).dp)
-    )
-}
-
-@Composable
-private fun ListContainer(items: List<String>) {
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 4.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceContainerLowest
-        ),
-        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
-    ) {
-        Column(
-            modifier = Modifier.padding(12.dp),
-            verticalArrangement = Arrangement.spacedBy(4.dp)
-        ) {
-            items.forEach { item ->
-                UnorderedListItem(item)
-            }
-        }
-    }
-}
-
-@Composable
-private fun UnorderedListItem(content: String) {
-    Row(
-        modifier = Modifier.padding(vertical = 2.dp),
-        verticalAlignment = Alignment.Top
-    ) {
-        Surface(
-            modifier = Modifier
-                .padding(top = 8.dp)
-                .size(6.dp),
-            shape = RoundedCornerShape(3.dp),
-            color = MaterialTheme.colorScheme.primary
-        ) {}
-        Spacer(modifier = Modifier.width(12.dp))
-        FormattedText(
-            text = content,
-            modifier = Modifier.weight(1f)
-        )
-    }
-}
-
-@Composable
-private fun BlockQuote(content: String) {
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 4.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant
-        ),
-        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
-    ) {
-        Row {
-            Box(
-                modifier = Modifier
-                    .width(4.dp)
-                    .height(40.dp)
-                    .background(MaterialTheme.colorScheme.primary)
-            )
-            FormattedText(
-                text = content,
-                modifier = Modifier.padding(16.dp),
-                style = MaterialTheme.typography.bodyMedium.copy(
-                    fontStyle = FontStyle.Italic
-                ),
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        }
-    }
-}
-
-@Composable
-private fun CodeBlock(code: String, language: String) {
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 4.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceContainerHighest
-        ),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
-    ) {
-        Column {
-            if (language.isNotEmpty()) {
-                Surface(
-                    color = MaterialTheme.colorScheme.primary,
-                    shape = RoundedCornerShape(topStart = 12.dp, topEnd = 12.dp)
-                ) {
-                    Text(
-                        text = language,
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onPrimary,
-                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
-                    )
-                }
-            }
-            Text(
-                text = code.trimEnd(),
-                style = MaterialTheme.typography.bodySmall.copy(
-                    fontFamily = FontFamily.Monospace
-                ),
-                color = MaterialTheme.colorScheme.onSurface,
-                modifier = Modifier.padding(16.dp)
-            )
-        }
-    }
-}
-
-@Composable
-private fun HorizontalRule() {
-    HorizontalDivider(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 16.dp),
-        thickness = 1.dp,
-        color = MaterialTheme.colorScheme.outline
-    )
-}
-
-@Composable
-private fun FormattedText(
-    text: String,
-    modifier: Modifier = Modifier,
-    style: androidx.compose.ui.text.TextStyle = MaterialTheme.typography.bodyMedium,
-    color: Color = MaterialTheme.colorScheme.onSurface
-) {
-    val annotatedString = buildAnnotatedString {
-        parseMarkdownText(text, this)
-    }
-
-    Text(
-        text = annotatedString,
-        style = style,
-        color = color,
-        modifier = modifier.padding(vertical = 2.dp)
-    )
-}
-
-private fun parseMarkdownText(text: String, builder: AnnotatedString.Builder) {
-    var currentIndex = 0
-    val processedText = text.trim()
-
-    val patterns = listOf(
-        Triple(
-            Regex("`([^`]+)`"),
-            { match: MatchResult ->
-                builder.withStyle(
-                    SpanStyle(
-                        fontFamily = FontFamily.Monospace,
-                        fontSize = 13.sp,
-                    )
-                ) {
-                    append(match.groupValues[1])
-                }
-            },
-            1
-        ),
-        Triple(
-            Regex("\\*\\*([^*]+)\\*\\*"),
-            { match: MatchResult ->
-                builder.withStyle(SpanStyle(fontWeight = FontWeight.Bold)) {
-                    append(match.groupValues[1])
-                }
-            },
-            2
-        ),
-        Triple(
-            Regex("__([^_]+)__"),
-            { match: MatchResult ->
-                builder.withStyle(SpanStyle(fontWeight = FontWeight.Bold)) {
-                    append(match.groupValues[1])
-                }
-            },
-            2
-        ),
-        Triple(
-            Regex("(?<!\\*)\\*([^*\\s][^*]*[^*\\s])\\*(?!\\*)"),
-            { match: MatchResult ->
-                builder.withStyle(SpanStyle(fontStyle = FontStyle.Italic)) {
-                    append(match.groupValues[1])
-                }
-            },
-            3
-        ),
-        Triple(
-            Regex("(?<!_)_([^_\\s][^_]*[^_\\s])_(?!_)"),
-            { match: MatchResult ->
-                builder.withStyle(SpanStyle(fontStyle = FontStyle.Italic)) {
-                    append(match.groupValues[1])
-                }
-            },
-            3
-        ),
-        Triple(
-            Regex("~~([^~]+)~~"),
-            { match: MatchResult ->
-                builder.withStyle(SpanStyle(textDecoration = TextDecoration.LineThrough)) {
-                    append(match.groupValues[1])
-                }
-            },
-            4
-        )
-    )
-
-    val allMatches = patterns.flatMap { (pattern, handler, priority) ->
-        pattern.findAll(processedText).map { match ->
-            Triple(match, handler, priority)
-        }
-    }.sortedWith(compareBy({ it.first.range.first }, { it.third }))
-
-    val processedRanges = mutableListOf<IntRange>()
-
-    for ((match, handler, _) in allMatches) {
-        val range = match.range
-        val overlaps = processedRanges.any { it.intersect(range).isNotEmpty() }
-
-        if (!overlaps) {
-            if (range.first > currentIndex) {
-                builder.append(processedText.substring(currentIndex, range.first))
-            }
-            handler(match)
-            currentIndex = range.last + 1
-            processedRanges.add(range)
-        }
-    }
-
-    if (currentIndex < processedText.length) {
-        builder.append(processedText.substring(currentIndex))
-    }
-
-    if (builder.length == 0) {
-        builder.append(processedText)
-    }
+    val urlRegex = "(?i)\\b((?:https?://|www\\d{0,3}[.]|[a-z0-9.\\-]+[.][a-z]{2,4}/)(?:[^\\s()<>]+|\\(([^\\s()<>]+|(\\([^\\s()<>]+\\)))*\\))+(?:\\(([^\\s()<>]+|(\\([^\\s()<>]+\\)))*\\)|[^\\s`!()\\[\\]{};:'\".,<>?«»“”‘’]))".toRegex()
+    return urlRegex.findAll(this).map { it.range to it.value }.toList()
 }
