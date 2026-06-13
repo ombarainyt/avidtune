@@ -67,7 +67,6 @@ import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import coil.compose.AsyncImage
 import com.cgens67.avidtune.BuildConfig
@@ -76,11 +75,11 @@ import com.cgens67.avidtune.R
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import okhttp3.OkHttpClient
+import okhttp3.Request
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
-import java.net.HttpURLConnection
-import java.net.URL
 import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
 import java.util.Locale
@@ -115,6 +114,13 @@ fun ChangelogScreen(
         else LinearOutSlowInEasing.transform(pullToRefreshState.distanceFraction).coerceIn(0f, 1f)
     }
 
+    val httpClient = remember {
+        OkHttpClient.Builder()
+            .followRedirects(true)
+            .followSslRedirects(true)
+            .build()
+    }
+
     fun fetchChangelog(tag: String) {
         isLoading = true
         hasError = false
@@ -131,18 +137,21 @@ fun ChangelogScreen(
                         showingCached = true
                     }
                 } else {
-                    val changelogUrl = URL("https://github.com/cgens67/AvidTune/releases/download/$tag/changelog.json")
-                    val connection = changelogUrl.openConnection() as HttpURLConnection
-                    connection.setRequestProperty("User-Agent", "AvidTune-Changelog-App")
-                    connection.setRequestProperty("Accept", "application/json")
+                    val request = Request.Builder()
+                        .url("https://github.com/cgens67/AvidTune/releases/download/$tag/changelog.json")
+                        .header("User-Agent", "AvidTune-App")
+                        .header("Accept", "application/json")
+                        .build()
 
-                    if (connection.responseCode == 200) {
-                        val changelogJson = connection.inputStream.bufferedReader().use { it.readText() }
+                    val response = httpClient.newCall(request).execute()
+
+                    if (response.isSuccessful) {
+                        val changelogJson = response.body?.string() ?: "{}"
                         val changelogData = JSONObject(changelogJson)
 
-                        val desc = changelogData.optString("description", null)
-                        val imageUrl = changelogData.optString("image", null)
-                        val warning = changelogData.optString("warning", null)
+                        val desc = changelogData.optString("description", "").takeIf { it.isNotBlank() }
+                        val imageUrl = changelogData.optString("image", "").takeIf { it.isNotBlank() }
+                        val warning = changelogData.optString("warning", "").takeIf { it.isNotBlank() }
                         val changelogArray = changelogData.optJSONArray("changelog")
 
                         val sections = mutableListOf<ChangelogSection>()
@@ -177,15 +186,15 @@ fun ChangelogScreen(
                         saveChangelogToCache(context, tag, sections, imageUrl, desc, warning)
                         withContext(Dispatchers.Main) {
                             changelogSections = sections
-                            updateImage = imageUrl.takeIf { !it.isNullOrBlank() }
-                            updateDescription = desc.takeIf { !it.isNullOrBlank() }
-                            updateWarning = warning.takeIf { !it.isNullOrBlank() }
+                            updateImage = imageUrl
+                            updateDescription = desc
+                            updateWarning = warning
                             isLoading = false
                             hasError = false
                             showingCached = false
                         }
                     } else {
-                        Log.e("ChangelogScreen", "HTTP Error ${connection.responseCode} for $tag")
+                        Log.e("ChangelogScreen", "HTTP Error ${response.code} for $tag")
                         withContext(Dispatchers.Main) { hasError = true; isLoading = false }
                     }
                 }
@@ -204,13 +213,16 @@ fun ChangelogScreen(
         isFetchingOldReleases = true
         coroutineScope.launch(Dispatchers.IO) {
             try {
-                val releasesUrl = URL("https://api.github.com/repos/cgens67/AvidTune/releases")
-                val connection = releasesUrl.openConnection() as HttpURLConnection
-                connection.setRequestProperty("User-Agent", "AvidTune-Changelog-App")
-                connection.setRequestProperty("Accept", "application/vnd.github+json")
+                val request = Request.Builder()
+                    .url("https://api.github.com/repos/cgens67/AvidTune/releases")
+                    .header("User-Agent", "AvidTune-App")
+                    .header("Accept", "application/vnd.github.v3+json")
+                    .build()
 
-                if (connection.responseCode == 200) {
-                    val json = connection.inputStream.bufferedReader().use { it.readText() }
+                val response = httpClient.newCall(request).execute()
+
+                if (response.isSuccessful) {
+                    val json = response.body?.string() ?: "[]"
                     val array = JSONArray(json)
                     val list = mutableListOf<ReleaseMetadata>()
                     val outputFormatter = DateTimeFormatter.ofPattern("MMMM d, yyyy", Locale.getDefault())
@@ -246,10 +258,11 @@ fun ChangelogScreen(
                         isFetchingOldReleases = false
                     }
                 } else {
-                    Log.e("ChangelogScreen", "GitHub API Error ${connection.responseCode}")
+                    Log.e("ChangelogScreen", "GitHub API Error ${response.code}")
                     withContext(Dispatchers.Main) { isFetchingOldReleases = false }
                 }
             } catch (e: Exception) {
+                Log.e("ChangelogScreen", "Exception fetching old releases", e)
                 withContext(Dispatchers.Main) { isFetchingOldReleases = false }
             }
         }
