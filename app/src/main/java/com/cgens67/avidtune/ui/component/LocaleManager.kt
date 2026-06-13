@@ -436,43 +436,24 @@ class LocaleManager private constructor(private val context: Context) {
 
     fun restartApp(context: Context) {
         try {
+            // Gracefully restart the UI activity without stopping the MusicService so audio doesn't pause or crash.
             var currentContext = context
-            var activity: Activity? = null
-            
             while (currentContext is android.content.ContextWrapper) {
                 if (currentContext is Activity) {
-                    activity = currentContext
-                    break
+                    val activity = currentContext
+                    Handler(Looper.getMainLooper()).post {
+                        activity.recreate()
+                    }
+                    return
                 }
                 currentContext = currentContext.baseContext
             }
 
-            if (activity != null) {
-                Handler(Looper.getMainLooper()).post {
-                    val intent = Intent(activity, activity::class.java)
-                    intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_CLEAR_TASK or Intent.FLAG_ACTIVITY_NEW_TASK)
-                    
-                    activity.startActivity(intent)
-                    
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-                        activity.overrideActivityTransition(
-                            Activity.OVERRIDE_TRANSITION_OPEN,
-                            android.R.anim.fade_in,
-                            android.R.anim.fade_out
-                        )
-                    } else {
-                        @Suppress("DEPRECATION")
-                        activity.overridePendingTransition(android.R.anim.fade_in, android.R.anim.fade_out)
-                    }
-                    activity.finish()
-                }
-            } else {
-                // Fallback
-                val intent = context.packageManager.getLaunchIntentForPackage(context.packageName)
-                intent?.let {
-                    it.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_NEW_TASK)
-                    context.startActivity(it)
-                }
+            // Fallback if context is not an Activity
+            val intent = context.packageManager.getLaunchIntentForPackage(context.packageName)
+            intent?.let {
+                it.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_NEW_TASK)
+                context.startActivity(it)
             }
         } catch (e: Exception) {
             Timber.tag(TAG).e(e, "Error restarting application")
