@@ -19,6 +19,7 @@ import androidx.navigation.NavType
 import androidx.navigation.compose.composable
 import androidx.navigation.navArgument
 import com.cgens67.avidtune.BuildConfig
+import com.cgens67.avidtune.ui.component.ChangelogScreen
 import com.cgens67.avidtune.ui.screens.artist.ArtistItemsScreen
 import com.cgens67.avidtune.ui.screens.artist.ArtistScreen
 import com.cgens67.avidtune.ui.screens.artist.ArtistSongsScreen
@@ -220,8 +221,6 @@ fun NavGraphBuilder.navigationBuilder(
         CachePlaylistScreen(navController, scrollBehavior)
     }
 
-
-
     composable(
         route = "top_playlist/{top}",
         arguments =
@@ -249,7 +248,6 @@ fun NavGraphBuilder.navigationBuilder(
     ) {
         YouTubeBrowseScreen(navController)
     }
-
 
     composable("settings") {
         val latestVersion by mutableLongStateOf(BuildConfig.VERSION_CODE.toLong())
@@ -293,6 +291,9 @@ fun NavGraphBuilder.navigationBuilder(
     }
     composable("settings/discord/login") {
         DiscordLoginScreen(navController)
+    }
+    composable("settings/changelog") {
+        ChangelogScreen(onDismiss = { navController.navigateUp() })
     }
     composable("settings/about") {
         AboutScreen(navController, scrollBehavior)
