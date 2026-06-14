@@ -4,7 +4,6 @@ import android.content.Context
 import android.net.ConnectivityManager
 import android.net.Uri
 import androidx.activity.compose.BackHandler
-import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
@@ -22,6 +21,7 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
@@ -117,6 +117,9 @@ import com.cgens67.avidtune.utils.YTPlayerUtils
 import com.cgens67.avidtune.utils.dataStore
 import com.cgens67.avidtune.utils.get
 import com.cgens67.avidtune.viewmodels.InsightViewModel
+import com.cgens67.avidtune.constants.DarkModeKey
+import com.cgens67.avidtune.ui.screens.settings.DarkMode
+import com.cgens67.avidtune.utils.rememberEnumPreference
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -206,7 +209,6 @@ class WrappedAudioService(private val context: Context) {
     private val connectivityManager = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
     private var player: ExoPlayer? = null
     private var playbackJob: Job? = null
-    private var fadeJob: Job? = null
 
     private val _isMuted = MutableStateFlow(false)
     val isMuted = _isMuted.asStateFlow()
@@ -230,31 +232,6 @@ class WrappedAudioService(private val context: Context) {
         player?.volume = if (_isMuted.value) 0f else 1f
     }
 
-    private fun startFadeIn() {
-        fadeJob?.cancel()
-        if (_isMuted.value) return
-        fadeJob = scope.launch {
-            player?.volume = 0f
-            for (i in 1..20) {
-                delay(25)
-                player?.volume = i / 20f
-            }
-            player?.volume = 1f
-        }
-    }
-
-    private suspend fun fadeOutSync() {
-        fadeJob?.cancel()
-        if (_isMuted.value || player?.isPlaying != true) return
-        
-        val startVol = player?.volume ?: 1f
-        for (i in 20 downTo 1) {
-            delay(25)
-            player?.volume = startVol * (i / 20f)
-        }
-        player?.pause()
-    }
-
     private suspend fun prepareTrack(songId: String?) {
         initPlayer()
         val songUri = getSongUri(songId)
@@ -270,36 +247,72 @@ class WrappedAudioService(private val context: Context) {
         }
     }
 
+    private fun fadeOut(onDone: () -> Unit) {
+        scope.launch {
+            var vol = player?.volume ?: 1f
+            val targetVol = if (_isMuted.value) 0f else 1f
+            if (vol > 0f && targetVol > 0f) {
+                while (vol > 0f) {
+                    vol -= 0.1f
+                    if (vol < 0f) vol = 0f
+                    player?.volume = vol
+                    delay(30)
+                }
+            }
+            onDone()
+        }
+    }
+
+    private fun fadeIn() {
+        scope.launch {
+            player?.volume = 0f
+            var vol = 0f
+            val targetVol = if (_isMuted.value) 0f else 1f
+            if (targetVol > 0f) {
+                while (vol < targetVol) {
+                    vol += 0.05f
+                    if (vol > targetVol) vol = targetVol
+                    player?.volume = vol
+                    delay(30)
+                }
+            }
+        }
+    }
+
     fun playTrack(songId: String?) {
         if (player?.currentMediaItem?.mediaId == songId) {
             if (player?.isPlaying == false) {
                 player?.play()
-                startFadeIn()
+                fadeIn()
             }
             return
         }
-        playbackJob?.cancel()
-        playbackJob = scope.launch {
-            try {
-                if (player?.isPlaying == true) {
-                    fadeOutSync()
-                }
 
-                prepareTrack(songId)
-                
-                withContext(Dispatchers.Main) {
-                    if (songId != null && songId != "2-p9DM2Xvsc") {
-                        player?.seekTo(30_000)
-                    } else {
-                        player?.seekTo(0)
+        val doPlay = {
+            playbackJob?.cancel()
+            playbackJob = scope.launch {
+                try {
+                    prepareTrack(songId)
+                    withContext(Dispatchers.Main) {
+                        if (songId != null && songId != "2-p9DM2Xvsc") {
+                            player?.seekTo(30_000)
+                        } else {
+                            player?.seekTo(0)
+                        }
+                        player?.volume = 0f
+                        player?.play()
+                        fadeIn()
                     }
-                    player?.volume = 0f
-                    player?.play()
+                } catch (e: Exception) {
+                    Timber.tag("WrappedAudioService").e(e, "Error during playback preparation")
                 }
-                startFadeIn()
-            } catch (e: Exception) {
-                Timber.tag("WrappedAudioService").e(e, "Error during playback preparation")
             }
+        }
+
+        if (player?.isPlaying == true) {
+            fadeOut { doPlay() }
+        } else {
+            doPlay()
         }
     }
 
@@ -322,20 +335,10 @@ class WrappedAudioService(private val context: Context) {
         }
     }
 
-    fun pause() {
-        scope.launch { fadeOutSync() }
-    }
-    
-    fun resume() {
-        if (player?.isPlaying == false) {
-            player?.play()
-            startFadeIn()
-        }
-    }
-    
+    fun pause() = player?.pause()
+    fun resume() = player?.play()
     fun release() {
         playbackJob?.cancel()
-        fadeJob?.cancel()
         player?.release()
         player = null
     }
@@ -368,6 +371,13 @@ fun InsightScreen(navController: NavController) {
     val scope = rememberCoroutineScope()
     val audioService = remember { WrappedAudioService(view.context) }
     val lifecycleOwner = LocalLifecycleOwner.current
+
+    val darkTheme by rememberEnumPreference(DarkModeKey, defaultValue = DarkMode.AUTO)
+    val isSystemDark = isSystemInDarkTheme()
+    val useDarkTheme = remember(darkTheme, isSystemDark) {
+        if (darkTheme == DarkMode.AUTO) isSystemDark else darkTheme == DarkMode.ON
+    }
+    val textColor = if (useDarkTheme) Color.White else Color(0xFF121212)
 
     DisposableEffect(Unit) {
         val window = (view.context as android.app.Activity).window
@@ -430,20 +440,20 @@ fun InsightScreen(navController: NavController) {
         }
     }
 
-    WrappedBackground(modifier = Modifier.fillMaxSize()) {
+    WrappedBackground(modifier = Modifier.fillMaxSize(), useDarkTheme = useDarkTheme) {
         Scaffold(
             topBar = {
                 TopAppBar(
                     title = { },
                     navigationIcon = {
                         IconButton(onClick = onClose) {
-                            Icon(painterResource(R.drawable.arrow_back), contentDescription = "Back", tint = Color.White)
+                            Icon(painterResource(R.drawable.arrow_back), contentDescription = "Back", tint = textColor)
                         }
                     },
                     actions = {
                         IconButton(onClick = { audioService.toggleMute() }) {
                             val icon = if (isMuted) R.drawable.volume_off else R.drawable.volume_up
-                            Icon(painterResource(icon), contentDescription = "Mute", tint = Color.White)
+                            Icon(painterResource(icon), contentDescription = "Mute", tint = textColor)
                         }
                     },
                     colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent)
@@ -457,58 +467,84 @@ fun InsightScreen(navController: NavController) {
                     modifier = Modifier.fillMaxSize()
                 ) { page ->
                     when (screens[page]) {
-                        is WrappedScreenType.Welcome -> WrappedIntro { scope.launch { pagerState.animateScrollToPage(page = 1) } }
+                        is WrappedScreenType.Welcome -> WrappedIntro(
+                            textColor = textColor,
+                            useDarkTheme = useDarkTheme
+                        ) { scope.launch { pagerState.animateScrollToPage(page = 1) } }
                         is WrappedScreenType.MinutesTease -> WrappedMinutesTease(
                             messagePair = messagePair,
                             onNavigateForward = { scope.launch { pagerState.animateScrollToPage(page = 2) } },
-                            isDataReady = state.isDataReady
+                            isDataReady = state.isDataReady,
+                            textColor = textColor
                         )
                         is WrappedScreenType.MinutesReveal -> WrappedMinutesScreen(
                             messagePair = messagePair, 
                             totalMinutes = state.totalMinutes,
-                            isVisible = pagerState.currentPage == screens.indexOf(WrappedScreenType.MinutesReveal)
+                            isVisible = pagerState.currentPage == screens.indexOf(WrappedScreenType.MinutesReveal),
+                            textColor = textColor
                         )
                         is WrappedScreenType.TotalSongs -> WrappedTotalSongsScreen(
                             uniqueSongCount = state.uniqueSongCount,
-                            isVisible = pagerState.currentPage == screens.indexOf(WrappedScreenType.TotalSongs)
+                            isVisible = pagerState.currentPage == screens.indexOf(WrappedScreenType.TotalSongs),
+                            textColor = textColor,
+                            useDarkTheme = useDarkTheme
                         )
                         is WrappedScreenType.TopSongReveal -> WrappedTopSongScreen(
                             topSong = state.topSongs.firstOrNull(),
-                            isVisible = pagerState.currentPage == screens.indexOf(WrappedScreenType.TopSongReveal)
+                            isVisible = pagerState.currentPage == screens.indexOf(WrappedScreenType.TopSongReveal),
+                            textColor = textColor
                         )
                         is WrappedScreenType.Top5Songs -> WrappedTop5SongsScreen(
                             topSongs = state.topSongs.take(5),
-                            isVisible = pagerState.currentPage == screens.indexOf(WrappedScreenType.Top5Songs)
+                            isVisible = pagerState.currentPage == screens.indexOf(WrappedScreenType.Top5Songs),
+                            textColor = textColor,
+                            useDarkTheme = useDarkTheme
                         )
                         is WrappedScreenType.TotalAlbums -> WrappedTotalAlbumsScreen(
                             uniqueAlbumCount = state.totalAlbums,
-                            isVisible = pagerState.currentPage == screens.indexOf(WrappedScreenType.TotalAlbums)
+                            isVisible = pagerState.currentPage == screens.indexOf(WrappedScreenType.TotalAlbums),
+                            textColor = textColor,
+                            useDarkTheme = useDarkTheme
                         )
                         is WrappedScreenType.TopAlbumReveal -> WrappedTopAlbumScreen(
                             topAlbum = state.topAlbum,
-                            isVisible = pagerState.currentPage == screens.indexOf(WrappedScreenType.TopAlbumReveal)
+                            isVisible = pagerState.currentPage == screens.indexOf(WrappedScreenType.TopAlbumReveal),
+                            textColor = textColor,
+                            useDarkTheme = useDarkTheme
                         )
                         is WrappedScreenType.Top5Albums -> WrappedTop5AlbumsScreen(
                             topAlbums = state.top5Albums,
-                            isVisible = pagerState.currentPage == screens.indexOf(WrappedScreenType.Top5Albums)
+                            isVisible = pagerState.currentPage == screens.indexOf(WrappedScreenType.Top5Albums),
+                            textColor = textColor,
+                            useDarkTheme = useDarkTheme
                         )
                         is WrappedScreenType.TotalArtists -> WrappedTotalArtistsScreen(
                             uniqueArtistCount = state.uniqueArtistCount,
-                            isVisible = pagerState.currentPage == screens.indexOf(WrappedScreenType.TotalArtists)
+                            isVisible = pagerState.currentPage == screens.indexOf(WrappedScreenType.TotalArtists),
+                            textColor = textColor
                         )
                         is WrappedScreenType.TopArtistReveal -> WrappedTopArtistScreen(
                             topArtist = state.topArtists.firstOrNull(),
-                            isVisible = pagerState.currentPage == screens.indexOf(WrappedScreenType.TopArtistReveal)
+                            isVisible = pagerState.currentPage == screens.indexOf(WrappedScreenType.TopArtistReveal),
+                            textColor = textColor
                         )
                         is WrappedScreenType.Top5Artists -> WrappedTop5ArtistsScreen(
                             topArtists = state.topArtists,
-                            isVisible = pagerState.currentPage == screens.indexOf(WrappedScreenType.Top5Artists)
+                            isVisible = pagerState.currentPage == screens.indexOf(WrappedScreenType.Top5Artists),
+                            textColor = textColor,
+                            useDarkTheme = useDarkTheme
                         )
                         is WrappedScreenType.Playlist -> PlaylistPage(
                             state = state,
-                            onCreatePlaylist = { viewModel.createPlaylist("previewalbum") }
+                            onCreatePlaylist = { viewModel.createPlaylist("previewalbum") },
+                            textColor = textColor,
+                            useDarkTheme = useDarkTheme
                         )
-                        is WrappedScreenType.Conclusion -> ConclusionPage(onClose = onClose)
+                        is WrappedScreenType.Conclusion -> ConclusionPage(
+                            onClose = onClose,
+                            textColor = textColor,
+                            useDarkTheme = useDarkTheme
+                        )
                     }
                 }
             }
@@ -528,7 +564,11 @@ private data class AnimatedElement(
 )
 
 @Composable
-fun AnimatedBackground(elementCount: Int = 20, shapeTypes: List<ShapeType> = listOf(ShapeType.Circle)) {
+fun AnimatedBackground(
+    elementCount: Int = 20, 
+    shapeTypes: List<ShapeType> = listOf(ShapeType.Circle),
+    textColor: Color
+) {
     val random = remember { Random(System.currentTimeMillis()) }
     val elements = remember {
         List(elementCount) {
@@ -560,16 +600,20 @@ fun AnimatedBackground(elementCount: Int = 20, shapeTypes: List<ShapeType> = lis
             val currentY = element.initialY + (element.targetY - element.initialY) * progress
 
             when (element.shapeType) {
-                ShapeType.Circle -> drawCircle(color = Color.White.copy(alpha = element.alpha), radius = element.size, center = Offset(currentX * size.width, currentY * size.height))
-                ShapeType.Rect -> drawRect(color = Color.White.copy(alpha = element.alpha), topLeft = Offset(currentX * size.width, currentY * size.height), size = Size(element.size, element.size))
-                ShapeType.Line -> drawLine(color = Color.White.copy(alpha = element.alpha), start = Offset(currentX * size.width, currentY * size.height), end = Offset((currentX + 0.1f) * size.width, (currentY + 0.1f) * size.height), strokeWidth = 2f)
+                ShapeType.Circle -> drawCircle(color = textColor.copy(alpha = element.alpha), radius = element.size, center = Offset(currentX * size.width, currentY * size.height))
+                ShapeType.Rect -> drawRect(color = textColor.copy(alpha = element.alpha), topLeft = Offset(currentX * size.width, currentY * size.height), size = Size(element.size, element.size))
+                ShapeType.Line -> drawLine(color = textColor.copy(alpha = element.alpha), start = Offset(currentX * size.width, currentY * size.height), end = Offset((currentX + 0.1f) * size.width, (currentY + 0.1f) * size.height), strokeWidth = 2f)
             }
         }
     }
 }
 
 @Composable
-fun WrappedBackground(modifier: Modifier = Modifier, content: @Composable BoxScope.() -> Unit = {}) {
+fun WrappedBackground(
+    modifier: Modifier = Modifier, 
+    useDarkTheme: Boolean,
+    content: @Composable BoxScope.() -> Unit = {}
+) {
     val infiniteTransition = rememberInfiniteTransition(label = "wrapped_bg")
     val blob1Offset by infiniteTransition.animateFloat(
         initialValue = 0f, targetValue = 2f * PI.toFloat(),
@@ -587,11 +631,22 @@ fun WrappedBackground(modifier: Modifier = Modifier, content: @Composable BoxSco
         label = "scale"
     )
 
-    val blob1Colors = remember { listOf(Color(0xFF7C3AED).copy(alpha = 0.4f), Color.Transparent) }
-    val blob2Colors = remember { listOf(Color(0xFF06B6D4).copy(alpha = 0.3f), Color.Transparent) }
-    val blob3Colors = remember { listOf(Color(0xFFDB2777).copy(alpha = 0.2f), Color.Transparent) }
+    val bgColor = if (useDarkTheme) Color(0xFF0F0620) else Color(0xFFF4F4F9)
+    val blob1Colors = remember(useDarkTheme) { 
+        if (useDarkTheme) listOf(Color(0xFF7C3AED).copy(alpha = 0.4f), Color.Transparent)
+        else listOf(Color(0xFF7C3AED).copy(alpha = 0.15f), Color.Transparent)
+    }
+    val blob2Colors = remember(useDarkTheme) { 
+        if (useDarkTheme) listOf(Color(0xFF06B6D4).copy(alpha = 0.3f), Color.Transparent)
+        else listOf(Color(0xFF06B6D4).copy(alpha = 0.12f), Color.Transparent)
+    }
+    val blob3Colors = remember(useDarkTheme) { 
+        if (useDarkTheme) listOf(Color(0xFFDB2777).copy(alpha = 0.2f), Color.Transparent)
+        else listOf(Color(0xFFDB2777).copy(alpha = 0.1f), Color.Transparent)
+    }
+    val dotColor = if (useDarkTheme) Color.White.copy(alpha = 0.05f) else Color.Black.copy(alpha = 0.05f)
 
-    BoxWithConstraints(modifier = modifier.fillMaxSize().background(Color(0xFF0F0620))) {
+    BoxWithConstraints(modifier = modifier.fillMaxSize().background(bgColor)) {
         val density = LocalDensity.current
         val widthPx = with(density) { maxWidth.toPx() }
         val heightPx = with(density) { maxHeight.toPx() }
@@ -623,7 +678,7 @@ fun WrappedBackground(modifier: Modifier = Modifier, content: @Composable BoxSco
             drawCircle(brush = Brush.radialGradient(blob3Colors, Offset(w * 0.1f, h * 0.9f), w * 0.6f), radius = w * 0.6f, center = Offset(w * 0.1f, h * 0.9f))
 
             if (dotPoints.isNotEmpty()) {
-                drawPoints(points = dotPoints, pointMode = PointMode.Points, color = Color.White.copy(alpha = 0.05f), strokeWidth = 3f, cap = StrokeCap.Round)
+                drawPoints(points = dotPoints, pointMode = PointMode.Points, color = dotColor, strokeWidth = 3f, cap = StrokeCap.Round)
             }
         }
         Box(modifier = Modifier.fillMaxSize()) { content() }
@@ -631,32 +686,9 @@ fun WrappedBackground(modifier: Modifier = Modifier, content: @Composable BoxSco
 }
 
 @Composable
-fun AnimatedDecorativeElement(modifier: Modifier = Modifier, isVisible: Boolean) {
-    val rotation = remember { Animatable(0f) }
-    val shapeType = remember { Random.nextInt(3) }
-    LaunchedEffect(isVisible) {
-        if (isVisible) {
-            delay(Random.nextLong(500))
-            rotation.animateTo(
-                targetValue = 360f,
-                animationSpec = infiniteRepeatable(tween(Random.nextInt(1000, 3000)), RepeatMode.Restart)
-            )
-        }
-    }
-    Canvas(modifier = modifier.graphicsLayer { rotationZ = rotation.value }) {
-        val strokeWidth = 2.dp.toPx()
-        when (shapeType) {
-            0 -> drawArc(color = Color.White.copy(alpha = 0.2f), startAngle = 0f, sweepAngle = 90f, useCenter = false, style = Stroke(strokeWidth))
-            1 -> drawCircle(color = Color.White.copy(alpha = 0.2f), style = Stroke(strokeWidth))
-            2 -> drawRect(color = Color.White.copy(alpha = 0.2f), style = Stroke(strokeWidth))
-        }
-    }
-}
-
-@Composable
 fun AutoResizingText(text: String, modifier: Modifier = Modifier, style: TextStyle, maxLines: Int = 1) {
-    var scaledTextStyle by remember(text, style) { mutableStateOf(style) }
-    var readyToDraw by remember(text, style) { mutableStateOf(false) }
+    var scaledTextStyle by remember(style) { mutableStateOf(style) }
+    var readyToDraw by remember(style) { mutableStateOf(false) }
 
     Text(
         text = text,
@@ -676,6 +708,9 @@ fun AutoResizingText(text: String, modifier: Modifier = Modifier, style: TextSty
 
 @Composable
 fun FormattedText(text: String, modifier: Modifier = Modifier, style: TextStyle) {
+    var scaledTextStyle by remember(style) { mutableStateOf(style) }
+    var readyToDraw by remember(style) { mutableStateOf(false) }
+
     val annotatedString = buildAnnotatedString {
         val parts = text.split("(?=\\*\\*)|(?<=\\*\\*)".toRegex())
         var isBold = false
@@ -687,17 +722,26 @@ fun FormattedText(text: String, modifier: Modifier = Modifier, style: TextStyle)
             }
         }
     }
+    
     Text(
         text = annotatedString,
-        modifier = modifier,
-        style = style
+        modifier = modifier.drawWithContent { if (readyToDraw) drawContent() },
+        style = scaledTextStyle,
+        softWrap = true,
+        onTextLayout = { textLayoutResult ->
+            if (textLayoutResult.hasVisualOverflow || textLayoutResult.didOverflowWidth || textLayoutResult.didOverflowHeight) {
+                scaledTextStyle = scaledTextStyle.copy(fontSize = scaledTextStyle.fontSize * 0.95)
+            } else {
+                readyToDraw = true
+            }
+        }
     )
 }
 
 // ======= WRAPPED PAGES =======
 
 @Composable
-fun WrappedIntro(onNext: () -> Unit) {
+fun WrappedIntro(textColor: Color, useDarkTheme: Boolean, onNext: () -> Unit) {
     var visible by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) { delay(200); visible = true }
 
@@ -714,7 +758,7 @@ fun WrappedIntro(onNext: () -> Unit) {
                 Image(
                     painter = painterResource(R.drawable.avidtune),
                     contentDescription = null,
-                    colorFilter = ColorFilter.tint(Color.White),
+                    colorFilter = ColorFilter.tint(textColor),
                     modifier = Modifier.size(100.dp).clip(CircleShape)
                 )
             }
@@ -727,7 +771,7 @@ fun WrappedIntro(onNext: () -> Unit) {
                 Box {
                     AutoResizingText(text = stringResource(R.string.insight_title), modifier = Modifier.padding(start = 2.dp, top = 2.dp), style = baseStyle.copy(color = Color.DarkGray))
                     AutoResizingText(text = stringResource(R.string.insight_title), modifier = Modifier.padding(start = 1.dp, top = 1.dp), style = baseStyle.copy(color = Color.Gray))
-                    AutoResizingText(text = stringResource(R.string.insight_title), modifier = Modifier, style = baseStyle.copy(color = Color.White))
+                    AutoResizingText(text = stringResource(R.string.insight_title), modifier = Modifier, style = baseStyle.copy(color = textColor))
                 }
             }
             Spacer(modifier = Modifier.height(8.dp))
@@ -737,7 +781,7 @@ fun WrappedIntro(onNext: () -> Unit) {
             ) {
                 Text(
                     text = stringResource(R.string.insight_intro_subtitle),
-                    color = Color.White,
+                    color = textColor,
                     fontSize = 16.sp,
                     textAlign = TextAlign.Center
                 )
@@ -751,11 +795,11 @@ fun WrappedIntro(onNext: () -> Unit) {
             Button(
                 onClick = onNext,
                 shape = RoundedCornerShape(50),
-                colors = ButtonDefaults.buttonColors(containerColor = Color.White)
+                colors = ButtonDefaults.buttonColors(containerColor = textColor)
             ) {
                 Text(
                     text = stringResource(R.string.insight_lets_go),
-                    color = Color.Black,
+                    color = if (useDarkTheme) Color.Black else Color.White,
                     fontWeight = FontWeight.Bold,
                     modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp)
                 )
@@ -765,7 +809,7 @@ fun WrappedIntro(onNext: () -> Unit) {
 }
 
 @Composable
-fun WrappedMinutesTease(messagePair: MessagePair?, onNavigateForward: () -> Unit, isDataReady: Boolean) {
+fun WrappedMinutesTease(messagePair: MessagePair?, onNavigateForward: () -> Unit, isDataReady: Boolean, textColor: Color) {
     LaunchedEffect(Unit) { delay(3500); onNavigateForward() }
     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
         AnimatedVisibility(
@@ -774,22 +818,22 @@ fun WrappedMinutesTease(messagePair: MessagePair?, onNavigateForward: () -> Unit
         ) {
             AutoResizingText(
                 text = messagePair?.teaseRes?.let { stringResource(it) } ?: "",
-                modifier = Modifier.padding(horizontal = 16.dp).fillMaxWidth(),
+                modifier = Modifier.padding(horizontal = 12.dp),
+                maxLines = 3,
                 style = TextStyle(
-                    color = Color.White,
+                    color = textColor,
                     fontSize = 28.sp,
                     lineHeight = 34.sp,
                     textAlign = TextAlign.Center,
                     fontFamily = bbh_bartle
-                ),
-                maxLines = 3
+                )
             )
         }
     }
 }
 
 @Composable
-fun WrappedMinutesScreen(messagePair: MessagePair?, totalMinutes: Long, isVisible: Boolean) {
+fun WrappedMinutesScreen(messagePair: MessagePair?, totalMinutes: Long, isVisible: Boolean, textColor: Color) {
     val animatedMinutes = remember { Animatable(0f) }
     val textMeasurer = rememberTextMeasurer()
     LaunchedEffect(isVisible, totalMinutes) {
@@ -802,16 +846,15 @@ fun WrappedMinutesScreen(messagePair: MessagePair?, totalMinutes: Long, isVisibl
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center
         ) {
-            AutoResizingText(
+            FormattedText(
                 text = messagePair?.teaseRes?.let { stringResource(it) } ?: "",
-                modifier = Modifier.padding(horizontal = 16.dp).fillMaxWidth(),
-                style = MaterialTheme.typography.headlineSmall.copy(color = Color.White, textAlign = TextAlign.Center, fontFamily = bbh_bartle, fontSize = 28.sp, lineHeight = 34.sp),
-                maxLines = 3
+                modifier = Modifier.padding(horizontal = 12.dp),
+                style = MaterialTheme.typography.headlineSmall.copy(color = textColor, textAlign = TextAlign.Center, fontFamily = bbh_bartle, fontSize = 28.sp, lineHeight = 34.sp)
             )
             Spacer(modifier = Modifier.height(32.dp))
             BoxWithConstraints(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
                 val density = LocalDensity.current
-                val baseStyle = MaterialTheme.typography.displayLarge.copy(color = Color.White, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center, fontFamily = bbh_bartle, drawStyle = Stroke(with(density) { 2.dp.toPx() }))
+                val baseStyle = MaterialTheme.typography.displayLarge.copy(color = textColor, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center, fontFamily = bbh_bartle, drawStyle = Stroke(with(density) { 2.dp.toPx() }))
                 val textStyle = remember(totalMinutes, maxWidth) {
                     var style = baseStyle.copy(fontSize = 96.sp)
                     var textWidth = textMeasurer.measure(totalMinutes.toString(), style).size.width
@@ -830,21 +873,21 @@ fun WrappedMinutesScreen(messagePair: MessagePair?, totalMinutes: Long, isVisibl
             FormattedText(
                 text = messagePair?.revealRes?.let { stringResource(it, totalMinutes) } ?: "",
                 modifier = Modifier.padding(horizontal = 24.dp),
-                style = MaterialTheme.typography.bodyLarge.copy(color = Color.White.copy(alpha = 0.8f), textAlign = TextAlign.Center)
+                style = MaterialTheme.typography.bodyLarge.copy(color = textColor.copy(alpha = 0.8f), textAlign = TextAlign.Center)
             )
         }
     }
 }
 
 @Composable
-fun WrappedTotalSongsScreen(uniqueSongCount: Int, isVisible: Boolean) {
+fun WrappedTotalSongsScreen(uniqueSongCount: Int, isVisible: Boolean, textColor: Color, useDarkTheme: Boolean) {
     val animatedSongs = remember { Animatable(0f) }
     val textMeasurer = rememberTextMeasurer()
     LaunchedEffect(isVisible, uniqueSongCount) {
         if (isVisible && uniqueSongCount > 0) animatedSongs.animateTo(targetValue = uniqueSongCount.toFloat(), animationSpec = tween(1500, easing = FastOutSlowInEasing))
     }
     Box(modifier = Modifier.fillMaxSize()) {
-        AnimatedBackground(shapeTypes = listOf(ShapeType.Line))
+        AnimatedBackground(shapeTypes = listOf(ShapeType.Line), textColor = textColor)
         Column(
             modifier = Modifier.fillMaxSize().padding(vertical = 32.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
@@ -852,14 +895,14 @@ fun WrappedTotalSongsScreen(uniqueSongCount: Int, isVisible: Boolean) {
         ) {
             AutoResizingText(
                 text = stringResource(R.string.insight_total_songs_title),
-                modifier = Modifier.padding(horizontal = 16.dp).fillMaxWidth(),
-                style = MaterialTheme.typography.headlineSmall.copy(color = Color.White, textAlign = TextAlign.Center, fontFamily = bbh_bartle, fontSize = 28.sp, lineHeight = 34.sp),
-                maxLines = 3
+                modifier = Modifier.padding(horizontal = 12.dp),
+                maxLines = 2,
+                style = MaterialTheme.typography.headlineSmall.copy(color = textColor, textAlign = TextAlign.Center, fontFamily = bbh_bartle, fontSize = 28.sp, lineHeight = 34.sp)
             )
             Spacer(modifier = Modifier.height(32.dp))
             BoxWithConstraints(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
                 val density = LocalDensity.current
-                val baseStyle = MaterialTheme.typography.displayLarge.copy(color = Color.White, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center, fontFamily = bbh_bartle, drawStyle = Stroke(with(density) { 2.dp.toPx() }))
+                val baseStyle = MaterialTheme.typography.displayLarge.copy(color = textColor, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center, fontFamily = bbh_bartle, drawStyle = Stroke(with(density) { 2.dp.toPx() }))
                 val textStyle = remember(uniqueSongCount, maxWidth) {
                     var style = baseStyle.copy(fontSize = 96.sp)
                     var textWidth = textMeasurer.measure(uniqueSongCount.toString(), style).size.width
@@ -878,14 +921,14 @@ fun WrappedTotalSongsScreen(uniqueSongCount: Int, isVisible: Boolean) {
             Text(
                 text = stringResource(R.string.insight_total_songs_subtitle),
                 modifier = Modifier.padding(horizontal = 24.dp),
-                style = MaterialTheme.typography.bodyLarge.copy(color = Color.White.copy(alpha = 0.8f), textAlign = TextAlign.Center)
+                style = MaterialTheme.typography.bodyLarge.copy(color = textColor.copy(alpha = 0.8f), textAlign = TextAlign.Center)
             )
         }
     }
 }
 
 @Composable
-fun WrappedTopSongScreen(topSong: SongWithStats?, isVisible: Boolean) {
+fun WrappedTopSongScreen(topSong: SongWithStats?, isVisible: Boolean, textColor: Color) {
     var visible by remember { mutableStateOf(false) }
     LaunchedEffect(isVisible) { if (isVisible) { delay(200); visible = true } }
     Box(modifier = Modifier.fillMaxSize()) {
@@ -900,9 +943,9 @@ fun WrappedTopSongScreen(topSong: SongWithStats?, isVisible: Boolean) {
             ) {
                 AutoResizingText(
                     text = stringResource(R.string.insight_top_song_title),
-                    style = MaterialTheme.typography.headlineSmall.copy(color = Color.White, fontFamily = bbh_bartle, fontSize = 28.sp, lineHeight = 34.sp),
-                    modifier = Modifier.padding(horizontal = 16.dp).fillMaxWidth(),
-                    maxLines = 3
+                    style = MaterialTheme.typography.headlineSmall.copy(color = textColor, fontFamily = bbh_bartle, fontSize = 28.sp, lineHeight = 34.sp),
+                    textAlign = TextAlign.Center,
+                    maxLines = 2
                 )
             }
             Spacer(modifier = Modifier.height(32.dp))
@@ -924,7 +967,7 @@ fun WrappedTopSongScreen(topSong: SongWithStats?, isVisible: Boolean) {
             ) {
                 Text(
                     text = topSong?.title ?: stringResource(R.string.insight_no_data),
-                    style = MaterialTheme.typography.headlineMedium.copy(color = Color.White),
+                    style = MaterialTheme.typography.headlineMedium.copy(color = textColor),
                     fontWeight = FontWeight.Bold,
                     textAlign = TextAlign.Center
                 )
@@ -936,7 +979,7 @@ fun WrappedTopSongScreen(topSong: SongWithStats?, isVisible: Boolean) {
             ) {
                 Text(
                     text = stringResource(R.string.insight_listened_for_minutes, (topSong?.timeListened ?: 0) / 60000),
-                    style = MaterialTheme.typography.bodyLarge.copy(color = Color.White.copy(alpha = 0.8f)),
+                    style = MaterialTheme.typography.bodyLarge.copy(color = textColor.copy(alpha = 0.8f)),
                     textAlign = TextAlign.Center
                 )
             }
@@ -945,11 +988,11 @@ fun WrappedTopSongScreen(topSong: SongWithStats?, isVisible: Boolean) {
 }
 
 @Composable
-fun WrappedTop5SongsScreen(topSongs: List<SongWithStats>, isVisible: Boolean) {
+fun WrappedTop5SongsScreen(topSongs: List<SongWithStats>, isVisible: Boolean, textColor: Color, useDarkTheme: Boolean) {
     var visible by remember { mutableStateOf(false) }
     LaunchedEffect(isVisible) { if (isVisible) { delay(200); visible = true } }
     Box(modifier = Modifier.fillMaxSize()) {
-        AnimatedBackground(elementCount = 25, shapeTypes = listOf(ShapeType.Rect))
+        AnimatedBackground(elementCount = 25, shapeTypes = listOf(ShapeType.Rect), textColor = textColor)
         Column(
             modifier = Modifier.fillMaxSize().padding(horizontal = 12.dp, vertical = 32.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
@@ -961,9 +1004,9 @@ fun WrappedTop5SongsScreen(topSongs: List<SongWithStats>, isVisible: Boolean) {
             ) {
                 AutoResizingText(
                     text = stringResource(R.string.insight_top_5_songs),
-                    style = TextStyle(fontFamily = bbh_bartle, fontSize = 34.sp, color = Color.White, textAlign = TextAlign.Center, lineHeight = 38.sp),
-                    modifier = Modifier.padding(horizontal = 16.dp).fillMaxWidth(),
-                    maxLines = 2
+                    maxLines = 2,
+                    modifier = Modifier.padding(horizontal = 12.dp),
+                    style = TextStyle(fontSize = 34.sp, fontFamily = bbh_bartle, color = textColor, textAlign = TextAlign.Center, lineHeight = 38.sp)
                 )
             }
             Spacer(modifier = Modifier.height(32.dp))
@@ -981,7 +1024,7 @@ fun WrappedTop5SongsScreen(topSongs: List<SongWithStats>, isVisible: Boolean) {
                                 text = "${index + 1}",
                                 fontFamily = bbh_bartle,
                                 fontSize = 36.sp,
-                                color = Color.White.copy(alpha = 0.8f),
+                                color = textColor.copy(alpha = 0.8f),
                                 modifier = Modifier.width(40.dp)
                             )
                             Spacer(modifier = Modifier.width(16.dp))
@@ -995,7 +1038,7 @@ fun WrappedTop5SongsScreen(topSongs: List<SongWithStats>, isVisible: Boolean) {
                             Column {
                                 Text(
                                     text = song.title,
-                                    color = Color.White,
+                                    color = textColor,
                                     fontWeight = FontWeight.Bold,
                                     fontSize = 16.sp
                                 )
@@ -1009,7 +1052,7 @@ fun WrappedTop5SongsScreen(topSongs: List<SongWithStats>, isVisible: Boolean) {
 }
 
 @Composable
-fun WrappedTotalAlbumsScreen(uniqueAlbumCount: Int, isVisible: Boolean) {
+fun WrappedTotalAlbumsScreen(uniqueAlbumCount: Int, isVisible: Boolean, textColor: Color, useDarkTheme: Boolean) {
     val animatedAlbums = remember { Animatable(0f) }
     val textMeasurer = rememberTextMeasurer()
     var visible by remember { mutableStateOf(false) }
@@ -1017,7 +1060,7 @@ fun WrappedTotalAlbumsScreen(uniqueAlbumCount: Int, isVisible: Boolean) {
         if (isVisible) { visible = true; if (uniqueAlbumCount > 0) animatedAlbums.animateTo(targetValue = uniqueAlbumCount.toFloat(), animationSpec = tween(1500, easing = FastOutSlowInEasing)) }
     }
     Box(modifier = Modifier.fillMaxSize()) {
-        AnimatedBackground(shapeTypes = listOf(ShapeType.Circle))
+        AnimatedBackground(shapeTypes = listOf(ShapeType.Circle), textColor = textColor)
         Column(
             modifier = Modifier.fillMaxSize().padding(vertical = 32.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
@@ -1029,15 +1072,15 @@ fun WrappedTotalAlbumsScreen(uniqueAlbumCount: Int, isVisible: Boolean) {
             ) {
                 AutoResizingText(
                     text = stringResource(R.string.insight_total_albums_title),
-                    modifier = Modifier.padding(horizontal = 16.dp).fillMaxWidth(),
-                    style = MaterialTheme.typography.headlineSmall.copy(color = Color.White, textAlign = TextAlign.Center, fontFamily = bbh_bartle, fontSize = 28.sp, lineHeight = 34.sp),
-                    maxLines = 3
+                    modifier = Modifier.padding(horizontal = 12.dp),
+                    maxLines = 2,
+                    style = MaterialTheme.typography.headlineSmall.copy(color = textColor, textAlign = TextAlign.Center, fontFamily = bbh_bartle, fontSize = 28.sp, lineHeight = 34.sp)
                 )
             }
             Spacer(modifier = Modifier.height(32.dp))
             BoxWithConstraints(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
                 val density = LocalDensity.current
-                val baseStyle = MaterialTheme.typography.displayLarge.copy(color = Color.White, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center, fontFamily = bbh_bartle, drawStyle = Stroke(with(density) { 2.dp.toPx() }))
+                val baseStyle = MaterialTheme.typography.displayLarge.copy(color = textColor, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center, fontFamily = bbh_bartle, drawStyle = Stroke(with(density) { 2.dp.toPx() }))
                 val textStyle = remember(uniqueAlbumCount, maxWidth) {
                     var style = baseStyle.copy(fontSize = 96.sp)
                     var textWidth = textMeasurer.measure(uniqueAlbumCount.toString(), style).size.width
@@ -1060,7 +1103,7 @@ fun WrappedTotalAlbumsScreen(uniqueAlbumCount: Int, isVisible: Boolean) {
                 Text(
                     text = stringResource(R.string.insight_total_albums_subtitle),
                     modifier = Modifier.padding(horizontal = 24.dp),
-                    style = MaterialTheme.typography.bodyLarge.copy(color = Color.White.copy(alpha = 0.8f), textAlign = TextAlign.Center)
+                    style = MaterialTheme.typography.bodyLarge.copy(color = textColor.copy(alpha = 0.8f), textAlign = TextAlign.Center)
                 )
             }
         }
@@ -1068,11 +1111,11 @@ fun WrappedTotalAlbumsScreen(uniqueAlbumCount: Int, isVisible: Boolean) {
 }
 
 @Composable
-fun WrappedTopAlbumScreen(topAlbum: Album?, isVisible: Boolean) {
+fun WrappedTopAlbumScreen(topAlbum: Album?, isVisible: Boolean, textColor: Color, useDarkTheme: Boolean) {
     var visible by remember { mutableStateOf(false) }
     LaunchedEffect(isVisible) { if (isVisible) visible = true }
     Box(modifier = Modifier.fillMaxSize()) {
-        AnimatedBackground(shapeTypes = listOf(ShapeType.Rect))
+        AnimatedBackground(shapeTypes = listOf(ShapeType.Rect), textColor = textColor)
         Column(
             modifier = Modifier.fillMaxSize().padding(horizontal = 8.dp, vertical = 32.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
@@ -1084,9 +1127,9 @@ fun WrappedTopAlbumScreen(topAlbum: Album?, isVisible: Boolean) {
             ) {
                 AutoResizingText(
                     text = stringResource(R.string.insight_top_album_title),
-                    style = TextStyle(fontFamily = bbh_bartle, fontSize = 28.sp, color = Color.White, textAlign = TextAlign.Center, lineHeight = 34.sp),
-                    modifier = Modifier.padding(horizontal = 16.dp).fillMaxWidth(),
-                    maxLines = 3
+                    maxLines = 2,
+                    modifier = Modifier.padding(horizontal = 12.dp),
+                    style = TextStyle(fontFamily = bbh_bartle, fontSize = 28.sp, color = textColor, textAlign = TextAlign.Center, lineHeight = 34.sp)
                 )
             }
             Spacer(modifier = Modifier.height(32.dp))
@@ -1109,7 +1152,7 @@ fun WrappedTopAlbumScreen(topAlbum: Album?, isVisible: Boolean) {
                 Text(
                     text = topAlbum?.album?.title ?: stringResource(R.string.insight_no_data),
                     fontSize = 24.sp,
-                    color = Color.White,
+                    color = textColor,
                     fontWeight = FontWeight.Bold,
                     textAlign = TextAlign.Center
                 )
@@ -1122,7 +1165,7 @@ fun WrappedTopAlbumScreen(topAlbum: Album?, isVisible: Boolean) {
                 Text(
                     text = stringResource(R.string.insight_listened_for_minutes, (topAlbum?.timeListened ?: 0) / 60000),
                     fontSize = 16.sp,
-                    color = Color.White.copy(alpha = 0.8f),
+                    color = textColor.copy(alpha = 0.8f),
                     textAlign = TextAlign.Center
                 )
             }
@@ -1131,11 +1174,11 @@ fun WrappedTopAlbumScreen(topAlbum: Album?, isVisible: Boolean) {
 }
 
 @Composable
-fun WrappedTop5AlbumsScreen(topAlbums: List<Album>, isVisible: Boolean) {
+fun WrappedTop5AlbumsScreen(topAlbums: List<Album>, isVisible: Boolean, textColor: Color, useDarkTheme: Boolean) {
     var visible by remember { mutableStateOf(false) }
     LaunchedEffect(isVisible) { if (isVisible) { delay(200); visible = true } }
     Box(modifier = Modifier.fillMaxSize()) {
-        AnimatedBackground(shapeTypes = listOf(ShapeType.Circle))
+        AnimatedBackground(shapeTypes = listOf(ShapeType.Circle), textColor = textColor)
         Column(
             modifier = Modifier.fillMaxSize().padding(horizontal = 12.dp, vertical = 32.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
@@ -1147,9 +1190,9 @@ fun WrappedTop5AlbumsScreen(topAlbums: List<Album>, isVisible: Boolean) {
             ) {
                 AutoResizingText(
                     text = stringResource(R.string.insight_top_5_albums),
-                    style = TextStyle(fontFamily = bbh_bartle, fontSize = 34.sp, color = Color.White, textAlign = TextAlign.Center, lineHeight = 38.sp),
-                    modifier = Modifier.padding(horizontal = 16.dp).fillMaxWidth(),
-                    maxLines = 2
+                    maxLines = 2,
+                    modifier = Modifier.padding(horizontal = 12.dp),
+                    style = TextStyle(fontFamily = bbh_bartle, fontSize = 34.sp, color = textColor, textAlign = TextAlign.Center, lineHeight = 38.sp)
                 )
             }
             Spacer(modifier = Modifier.height(32.dp))
@@ -1167,7 +1210,7 @@ fun WrappedTop5AlbumsScreen(topAlbums: List<Album>, isVisible: Boolean) {
                                 text = "${index + 1}",
                                 fontFamily = bbh_bartle,
                                 fontSize = 36.sp,
-                                color = Color.White.copy(alpha = 0.8f),
+                                color = textColor.copy(alpha = 0.8f),
                                 modifier = Modifier.width(40.dp)
                             )
                             Spacer(modifier = Modifier.width(16.dp))
@@ -1181,14 +1224,14 @@ fun WrappedTop5AlbumsScreen(topAlbums: List<Album>, isVisible: Boolean) {
                             Column {
                                 Text(
                                     text = album.album.title,
-                                    color = Color.White,
+                                    color = textColor,
                                     fontWeight = FontWeight.Bold,
                                     fontSize = 16.sp,
                                     maxLines = 1
                                 )
                                 Text(
                                     text = stringResource(R.string.insight_minutes_short, (album.timeListened ?: 0) / 60000),
-                                    color = Color.White.copy(alpha = 0.7f),
+                                    color = textColor.copy(alpha = 0.7f),
                                     fontSize = 14.sp
                                 )
                             }
@@ -1201,13 +1244,14 @@ fun WrappedTop5AlbumsScreen(topAlbums: List<Album>, isVisible: Boolean) {
 }
 
 @Composable
-fun WrappedTotalArtistsScreen(uniqueArtistCount: Int, isVisible: Boolean) {
+fun WrappedTotalArtistsScreen(uniqueArtistCount: Int, isVisible: Boolean, textColor: Color) {
     val animatedArtists = remember { Animatable(0f) }
     val textMeasurer = rememberTextMeasurer()
     LaunchedEffect(isVisible, uniqueArtistCount) {
         if (isVisible && uniqueArtistCount > 0) animatedArtists.animateTo(targetValue = uniqueArtistCount.toFloat(), animationSpec = tween(1500, easing = FastOutSlowInEasing))
     }
     Box(modifier = Modifier.fillMaxSize()) {
+        AnimatedBackground(shapeTypes = listOf(ShapeType.Line), textColor = textColor)
         Column(
             modifier = Modifier.fillMaxSize().padding(vertical = 32.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
@@ -1215,14 +1259,14 @@ fun WrappedTotalArtistsScreen(uniqueArtistCount: Int, isVisible: Boolean) {
         ) {
             AutoResizingText(
                 text = stringResource(R.string.insight_total_artists_title),
-                modifier = Modifier.padding(horizontal = 16.dp).fillMaxWidth(),
-                style = MaterialTheme.typography.headlineSmall.copy(color = Color.White, textAlign = TextAlign.Center, fontFamily = bbh_bartle, fontSize = 28.sp, lineHeight = 34.sp),
-                maxLines = 3
+                modifier = Modifier.padding(horizontal = 12.dp),
+                maxLines = 2,
+                style = MaterialTheme.typography.headlineSmall.copy(color = textColor, textAlign = TextAlign.Center, fontFamily = bbh_bartle, fontSize = 28.sp, lineHeight = 34.sp)
             )
             Spacer(modifier = Modifier.height(32.dp))
             BoxWithConstraints(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
                 val density = LocalDensity.current
-                val baseStyle = MaterialTheme.typography.displayLarge.copy(color = Color.White, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center, fontFamily = bbh_bartle, drawStyle = Stroke(with(density) { 2.dp.toPx() }))
+                val baseStyle = MaterialTheme.typography.displayLarge.copy(color = textColor, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center, fontFamily = bbh_bartle, drawStyle = Stroke(with(density) { 2.dp.toPx() }))
                 val textStyle = remember(uniqueArtistCount, maxWidth) {
                     var style = baseStyle.copy(fontSize = 96.sp)
                     var textWidth = textMeasurer.measure(uniqueArtistCount.toString(), style).size.width
@@ -1241,75 +1285,79 @@ fun WrappedTotalArtistsScreen(uniqueArtistCount: Int, isVisible: Boolean) {
             Text(
                 text = stringResource(R.string.insight_total_artists_subtitle),
                 modifier = Modifier.padding(horizontal = 24.dp),
-                style = MaterialTheme.typography.bodyLarge.copy(color = Color.White.copy(alpha = 0.8f), textAlign = TextAlign.Center)
+                style = MaterialTheme.typography.bodyLarge.copy(color = textColor.copy(alpha = 0.8f), textAlign = TextAlign.Center)
             )
         }
     }
 }
 
 @Composable
-fun WrappedTopArtistScreen(topArtist: Artist?, isVisible: Boolean) {
+fun WrappedTopArtistScreen(topArtist: Artist?, isVisible: Boolean, textColor: Color) {
     var visible by remember { mutableStateOf(false) }
     LaunchedEffect(isVisible) { if (isVisible) visible = true }
-    Column(
-        modifier = Modifier.fillMaxSize().padding(horizontal = 8.dp, vertical = 32.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center
-    ) {
-        AnimatedVisibility(
-            visible = visible,
-            enter = fadeIn(tween(1000, 200)) + slideInVertically(tween(1000, 200))
+    Box(modifier = Modifier.fillMaxSize()) {
+        AnimatedBackground(shapeTypes = listOf(ShapeType.Rect), textColor = textColor)
+        Column(
+            modifier = Modifier.fillMaxSize().padding(horizontal = 8.dp, vertical = 32.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
         ) {
-            AutoResizingText(
-                text = stringResource(R.string.insight_top_artist_title),
-                style = MaterialTheme.typography.headlineSmall.copy(color = Color.White, fontFamily = bbh_bartle, fontSize = 28.sp, lineHeight = 34.sp),
-                modifier = Modifier.padding(horizontal = 16.dp).fillMaxWidth(),
-                maxLines = 3
-            )
-        }
-        Spacer(modifier = Modifier.height(32.dp))
-        AnimatedVisibility(
-            visible = visible,
-            enter = fadeIn(tween(1000, 400)) + slideInVertically(tween(1000, 400))
-        ) {
-            AsyncImage(
-                model = ImageRequest.Builder(LocalContext.current).data(topArtist?.artist?.thumbnailUrl).build(),
-                contentDescription = null,
-                modifier = Modifier.size(200.dp).clip(CircleShape),
-                contentScale = ContentScale.Crop
-            )
-        }
-        Spacer(modifier = Modifier.height(16.dp))
-        AnimatedVisibility(
-            visible = visible,
-            enter = fadeIn(tween(1000, 600)) + slideInVertically(tween(1000, 600))
-        ) {
-            Text(
-                text = topArtist?.artist?.name ?: stringResource(R.string.insight_no_data),
-                style = MaterialTheme.typography.headlineMedium.copy(color = Color.White),
-                fontWeight = FontWeight.Bold,
-                textAlign = TextAlign.Center
-            )
-        }
-        AnimatedVisibility(
-            visible = visible,
-            enter = fadeIn(tween(1000, 800)) + slideInVertically(tween(1000, 800))
-        ) {
-            Text(
-                text = stringResource(R.string.insight_listened_for_minutes, (topArtist?.timeListened ?: 0) / 60000),
-                style = MaterialTheme.typography.bodyLarge.copy(color = Color.White.copy(alpha = 0.8f)),
-                textAlign = TextAlign.Center
-            )
+            AnimatedVisibility(
+                visible = visible,
+                enter = fadeIn(tween(1000, 200)) + slideInVertically(tween(1000, 200))
+            ) {
+                AutoResizingText(
+                    text = stringResource(R.string.insight_top_artist_title),
+                    maxLines = 2,
+                    modifier = Modifier.padding(horizontal = 12.dp),
+                    style = MaterialTheme.typography.headlineSmall.copy(color = textColor, fontFamily = bbh_bartle, fontSize = 28.sp, lineHeight = 34.sp),
+                    textAlign = TextAlign.Center
+                )
+            }
+            Spacer(modifier = Modifier.height(32.dp))
+            AnimatedVisibility(
+                visible = visible,
+                enter = fadeIn(tween(1000, 400)) + slideInVertically(tween(1000, 400))
+            ) {
+                AsyncImage(
+                    model = ImageRequest.Builder(LocalContext.current).data(topArtist?.artist?.thumbnailUrl).build(),
+                    contentDescription = null,
+                    modifier = Modifier.size(200.dp).clip(CircleShape),
+                    contentScale = ContentScale.Crop
+                )
+            }
+            Spacer(modifier = Modifier.height(16.dp))
+            AnimatedVisibility(
+                visible = visible,
+                enter = fadeIn(tween(1000, 600)) + slideInVertically(tween(1000, 600))
+            ) {
+                Text(
+                    text = topArtist?.artist?.name ?: stringResource(R.string.insight_no_data),
+                    style = MaterialTheme.typography.headlineMedium.copy(color = textColor),
+                    fontWeight = FontWeight.Bold,
+                    textAlign = TextAlign.Center
+                )
+            }
+            AnimatedVisibility(
+                visible = visible,
+                enter = fadeIn(tween(1000, 800)) + slideInVertically(tween(1000, 800))
+            ) {
+                Text(
+                    text = stringResource(R.string.insight_listened_for_minutes, (topArtist?.timeListened ?: 0) / 60000),
+                    style = MaterialTheme.typography.bodyLarge.copy(color = textColor.copy(alpha = 0.8f)),
+                    textAlign = TextAlign.Center
+                )
+            }
         }
     }
 }
 
 @Composable
-fun WrappedTop5ArtistsScreen(topArtists: List<Artist>, isVisible: Boolean) {
+fun WrappedTop5ArtistsScreen(topArtists: List<Artist>, isVisible: Boolean, textColor: Color, useDarkTheme: Boolean) {
     var visible by remember { mutableStateOf(false) }
     LaunchedEffect(isVisible) { if (isVisible) { delay(200); visible = true } }
     Box(modifier = Modifier.fillMaxSize()) {
-        AnimatedBackground(elementCount = 15, shapeTypes = listOf(ShapeType.Line))
+        AnimatedBackground(elementCount = 15, shapeTypes = listOf(ShapeType.Line), textColor = textColor)
         Column(
             modifier = Modifier.fillMaxSize().padding(horizontal = 12.dp, vertical = 32.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
@@ -1321,9 +1369,9 @@ fun WrappedTop5ArtistsScreen(topArtists: List<Artist>, isVisible: Boolean) {
             ) {
                 AutoResizingText(
                     text = stringResource(R.string.insight_top_5_artists),
-                    style = TextStyle(fontFamily = bbh_bartle, fontSize = 34.sp, color = Color.White, textAlign = TextAlign.Center, lineHeight = 38.sp),
-                    modifier = Modifier.padding(horizontal = 16.dp).fillMaxWidth(),
-                    maxLines = 2
+                    maxLines = 2,
+                    modifier = Modifier.padding(horizontal = 12.dp),
+                    style = TextStyle(fontSize = 34.sp, fontFamily = bbh_bartle, color = textColor, textAlign = TextAlign.Center, lineHeight = 38.sp)
                 )
             }
             Spacer(modifier = Modifier.height(32.dp))
@@ -1341,7 +1389,7 @@ fun WrappedTop5ArtistsScreen(topArtists: List<Artist>, isVisible: Boolean) {
                                 text = "${index + 1}",
                                 fontFamily = bbh_bartle,
                                 fontSize = 36.sp,
-                                color = Color.White.copy(alpha = 0.8f),
+                                color = textColor.copy(alpha = 0.8f),
                                 modifier = Modifier.width(40.dp)
                             )
                             Spacer(modifier = Modifier.width(16.dp))
@@ -1355,13 +1403,13 @@ fun WrappedTop5ArtistsScreen(topArtists: List<Artist>, isVisible: Boolean) {
                             Column {
                                 Text(
                                     text = artist.artist.name,
-                                    color = Color.White,
+                                    color = textColor,
                                     fontWeight = FontWeight.Bold,
                                     fontSize = 16.sp
                                 )
                                 Text(
                                     text = stringResource(R.string.insight_minutes_short, (artist.timeListened ?: 0) / 60000),
-                                    color = Color.White.copy(alpha = 0.7f),
+                                    color = textColor.copy(alpha = 0.7f),
                                     fontSize = 14.sp
                                 )
                             }
@@ -1374,14 +1422,14 @@ fun WrappedTop5ArtistsScreen(topArtists: List<Artist>, isVisible: Boolean) {
 }
 
 @Composable
-fun PlaylistPage(state: WrappedState, onCreatePlaylist: () -> Unit) {
+fun PlaylistPage(state: WrappedState, onCreatePlaylist: () -> Unit, textColor: Color, useDarkTheme: Boolean) {
     val playlistCreationState = state.playlistCreationState
     var startAnimation by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) { delay(200); startAnimation = true }
     val contentAlpha by animateFloatAsState(targetValue = if (startAnimation) 1f else 0f, animationSpec = tween(800, 200), label = "alpha")
 
     Box(modifier = Modifier.fillMaxSize()) {
-        AnimatedBackground(shapeTypes = listOf(ShapeType.Circle))
+        AnimatedBackground(shapeTypes = listOf(ShapeType.Circle), textColor = textColor)
         Column(
             modifier = Modifier.fillMaxSize().padding(32.dp).alpha(contentAlpha),
             verticalArrangement = Arrangement.Center,
@@ -1389,9 +1437,9 @@ fun PlaylistPage(state: WrappedState, onCreatePlaylist: () -> Unit) {
         ) {
             AutoResizingText(
                 text = stringResource(R.string.insight_playlist_ready),
-                style = TextStyle(fontFamily = bbh_bartle, fontSize = 40.sp, color = Color.White, textAlign = TextAlign.Center, lineHeight = 48.sp),
-                modifier = Modifier.padding(horizontal = 16.dp).fillMaxWidth(),
-                maxLines = 3
+                maxLines = 2,
+                modifier = Modifier.padding(horizontal = 12.dp),
+                style = TextStyle(fontFamily = bbh_bartle, fontSize = 40.sp, color = textColor, textAlign = TextAlign.Center, lineHeight = 48.sp)
             )
             Spacer(modifier = Modifier.height(32.dp))
             Image(
@@ -1402,24 +1450,19 @@ fun PlaylistPage(state: WrappedState, onCreatePlaylist: () -> Unit) {
             Spacer(modifier = Modifier.height(24.dp))
             Text(
                 text = stringResource(R.string.insight_playlist_name, WrappedConstants.YEAR),
-                style = TextStyle(fontSize = 22.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                style = TextStyle(fontSize = 22.sp, fontWeight = FontWeight.Bold, color = textColor)
             )
             Spacer(modifier = Modifier.height(48.dp))
             Button(
                 onClick = { if (playlistCreationState == PlaylistCreationState.Idle) onCreatePlaylist() },
                 shape = CircleShape,
-                colors = ButtonDefaults.buttonColors(containerColor = Color.White),
-                modifier = Modifier.height(50.dp).width(240.dp)
+                colors = ButtonDefaults.buttonColors(containerColor = textColor),
+                modifier = Modifier.height(50.dp)
             ) {
-                AnimatedContent(
-                    targetState = playlistCreationState,
-                    label = "playlist_btn"
-                ) { btnState ->
-                    when (btnState) {
-                        is PlaylistCreationState.Idle -> Text(stringResource(R.string.insight_add_to_library), style = TextStyle(color = Color.Black, fontWeight = FontWeight.Bold))
-                        is PlaylistCreationState.Creating -> CircularProgressIndicator(modifier = Modifier.size(24.dp), color = Color.Black, strokeWidth = 2.dp)
-                        is PlaylistCreationState.Success -> Text(stringResource(R.string.insight_saved), style = TextStyle(color = Color.Black, fontWeight = FontWeight.Bold))
-                    }
+                when (playlistCreationState) {
+                    is PlaylistCreationState.Idle -> Text(stringResource(R.string.insight_add_to_library), style = TextStyle(color = if (useDarkTheme) Color.Black else Color.White, fontWeight = FontWeight.Bold))
+                    is PlaylistCreationState.Creating -> CircularProgressIndicator(modifier = Modifier.size(24.dp), color = if (useDarkTheme) Color.Black else Color.White, strokeWidth = 2.dp)
+                    is PlaylistCreationState.Success -> Text(stringResource(R.string.insight_saved), style = TextStyle(color = if (useDarkTheme) Color.Black else Color.White, fontWeight = FontWeight.Bold))
                 }
             }
         }
@@ -1427,9 +1470,9 @@ fun PlaylistPage(state: WrappedState, onCreatePlaylist: () -> Unit) {
 }
 
 @Composable
-fun ConclusionPage(onClose: () -> Unit) {
+fun ConclusionPage(onClose: () -> Unit, textColor: Color, useDarkTheme: Boolean) {
     Box(modifier = Modifier.fillMaxSize()) {
-        AnimatedBackground(elementCount = 30, shapeTypes = listOf(ShapeType.Circle, ShapeType.Line))
+        AnimatedBackground(elementCount = 30, shapeTypes = listOf(ShapeType.Circle, ShapeType.Line), textColor = textColor)
         Column(
             modifier = Modifier.fillMaxSize(),
             verticalArrangement = Arrangement.Center,
@@ -1438,13 +1481,13 @@ fun ConclusionPage(onClose: () -> Unit) {
             Image(
                 painter = painterResource(R.drawable.avidtune),
                 contentDescription = null,
-                colorFilter = ColorFilter.tint(Color.White),
+                colorFilter = ColorFilter.tint(textColor),
                 modifier = Modifier.size(96.dp).clip(CircleShape)
             )
             Spacer(modifier = Modifier.height(24.dp))
             Text(
                 text = stringResource(R.string.insight_thank_you),
-                style = TextStyle(fontSize = 28.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                style = TextStyle(fontSize = 28.sp, fontWeight = FontWeight.Bold, color = textColor)
             )
             Spacer(modifier = Modifier.height(8.dp))
             Text(
@@ -1455,11 +1498,11 @@ fun ConclusionPage(onClose: () -> Unit) {
             Button(
                 onClick = onClose,
                 shape = CircleShape,
-                colors = ButtonDefaults.buttonColors(containerColor = Color.White)
+                colors = ButtonDefaults.buttonColors(containerColor = textColor)
             ) {
                 Text(
                     text = stringResource(R.string.insight_close),
-                    style = TextStyle(color = Color.Black, fontWeight = FontWeight.Bold)
+                    style = TextStyle(color = if (useDarkTheme) Color.Black else Color.White, fontWeight = FontWeight.Bold)
                 )
             }
         }
