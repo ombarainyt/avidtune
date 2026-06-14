@@ -120,6 +120,7 @@ fun ChangelogScreen(
     versionTag: String = BuildConfig.VERSION_NAME
 ) {
     var selectedTab by remember { mutableIntStateOf(0) }
+    var refreshTrigger by remember { mutableIntStateOf(0) }
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
 
     Scaffold(
@@ -139,6 +140,14 @@ fun ChangelogScreen(
                 navigationIcon = {
                     IconButton(onClick = onDismiss) {
                         Icon(painterResource(R.drawable.arrow_back), null)
+                    }
+                },
+                actions = {
+                    IconButton(onClick = { refreshTrigger++ }) {
+                        Icon(
+                            painter = painterResource(R.drawable.sync),
+                            contentDescription = stringResource(R.string.action_retry)
+                        )
                     }
                 },
                 colors = TopAppBarDefaults.largeTopAppBarColors(
@@ -171,9 +180,9 @@ fun ChangelogScreen(
             }
 
             if (selectedTab == 0) {
-                ReleasesContent(versionTag = versionTag)
+                ReleasesContent(versionTag = versionTag, refreshTrigger = refreshTrigger)
             } else {
-                CommitsContent()
+                CommitsContent(refreshTrigger = refreshTrigger)
             }
         }
     }
@@ -182,7 +191,7 @@ fun ChangelogScreen(
 // --- Releases (News-style) Content ---
 
 @Composable
-fun ReleasesContent(versionTag: String) {
+fun ReleasesContent(versionTag: String, refreshTrigger: Int) {
     val context = LocalContext.current
     var changelogSections by remember { mutableStateOf<List<ChangelogSection>>(emptyList()) }
     var updateImage by remember { mutableStateOf<String?>(null) }
@@ -218,13 +227,13 @@ fun ReleasesContent(versionTag: String) {
             .build()
     }
 
-    fun fetchChangelog(tag: String) {
+    fun fetchChangelog(tag: String, bypassCache: Boolean = false) {
         isLoading = true
         hasError = false
         detailedError = null
         coroutineScope.launch(Dispatchers.IO) {
             try {
-                val cachedData = loadChangelogFromCache(context, tag)
+                val cachedData = if (!bypassCache) loadChangelogFromCache(context, tag) else null
                 if (cachedData != null) {
                     withContext(Dispatchers.Main) {
                         changelogSections = cachedData.sections
@@ -366,7 +375,7 @@ fun ReleasesContent(versionTag: String) {
                         if (currentFromList != null) {
                             availableReleases = list
                         } else {
-                            val currentVersion = ReleaseMetadata(currentVersionTag, currentVersionTag, context.getString(R.string.current_version), null)
+                            val currentVersion = ReleaseMetadata(currentVersionTag, currentVersionTag, currentVersionStr, null)
                             availableReleases = (listOf(currentVersion) + list).distinctBy { it.tagName }
                         }
                         isFetchingOldReleases = false
@@ -393,13 +402,20 @@ fun ReleasesContent(versionTag: String) {
         fetchChangelog(currentVersionTag)
     }
 
+    LaunchedEffect(refreshTrigger) {
+        if (refreshTrigger > 0) {
+            fetchOldReleases()
+            fetchChangelog(currentVersionTag, bypassCache = true)
+        }
+    }
+
     Box(
         modifier = Modifier
             .fillMaxSize()
             .pullToRefresh(
                 state = pullToRefreshState,
                 isRefreshing = isRefreshing,
-                onRefresh = { fetchChangelog(currentVersionTag) }
+                onRefresh = { fetchChangelog(currentVersionTag, bypassCache = true) }
             )
             .windowInsetsPadding(LocalPlayerAwareWindowInsets.current.only(WindowInsetsSides.Bottom))
     ) {
@@ -477,7 +493,7 @@ fun ReleasesContent(versionTag: String) {
                         }
                         
                         Spacer(Modifier.height(24.dp))
-                        Button(onClick = { fetchChangelog(currentVersionTag) }) {
+                        Button(onClick = { fetchChangelog(currentVersionTag, bypassCache = true) }) {
                             Text(stringResource(R.string.action_retry))
                         }
                     }
@@ -639,8 +655,9 @@ fun ReleasesContent(versionTag: String) {
 
 // --- Commits Content ---
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun CommitsContent() {
+fun CommitsContent(refreshTrigger: Int) {
     val context = LocalContext.current
     var commits by remember { mutableStateOf<List<CommitData>>(emptyList()) }
     var isLoading by remember { mutableStateOf(true) }
@@ -709,6 +726,12 @@ fun CommitsContent() {
 
     LaunchedEffect(Unit) {
         fetchCommits()
+    }
+
+    LaunchedEffect(refreshTrigger) {
+        if (refreshTrigger > 0) {
+            fetchCommits()
+        }
     }
 
     Box(
