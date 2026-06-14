@@ -140,26 +140,23 @@ val bbh_bartle = FontFamily(Font(R.font.bartle_regular))
 
 object WrappedConstants {
     val YEAR = Calendar.getInstance().get(Calendar.YEAR)
-    val PLAYLIST_NAME = "AvidTune Insight $YEAR"
 }
 
-data class MessagePair(val range: LongRange, val tease: String, val reveal: String)
+data class MessagePair(val range: LongRange, val teaseRes: Int, val revealRes: Int)
 
 object WrappedRepository {
     private val messages = listOf(
-        MessagePair(0L..999L, "I really hope you are not dissapointed...", "That's **%d minutes**. Just warming up?"),
-        MessagePair(1000L..4999L, "It seems like you found us recently...", "And you dedicated **%d minutes** to the tunes."),
-        MessagePair(5000L..14999L, "Music is definitely your thing.", "**%d minutes** is a solid soundtrack for your year."),
-        MessagePair(15000L..39999L, "Do you ever take your headphones off?", "**%d minutes** suggests music is your oxygen."),
-        MessagePair(40000L..Long.MAX_VALUE, "Are you... okay?", "You literally lived here for **%d minutes**.")
+        MessagePair(0L..999L, R.string.insight_msg_tease_0, R.string.insight_msg_reveal_0),
+        MessagePair(1000L..4999L, R.string.insight_msg_tease_1000, R.string.insight_msg_reveal_1000),
+        MessagePair(5000L..14999L, R.string.insight_msg_tease_5000, R.string.insight_msg_reveal_5000),
+        MessagePair(15000L..39999L, R.string.insight_msg_tease_15000, R.string.insight_msg_reveal_15000),
+        MessagePair(40000L..Long.MAX_VALUE, R.string.insight_msg_tease_40000, R.string.insight_msg_reveal_40000)
     )
 
     fun getMessage(minutes: Long): MessagePair {
         val possibleMessages = messages.filter { minutes in it.range }
-        val chosenMessage = if (possibleMessages.isNotEmpty()) possibleMessages.random() 
-        else MessagePair(0L..Long.MAX_VALUE, "Looks like we lost count!", "But you definitely listened to **%d minutes** of music.")
-        
-        return chosenMessage.copy(reveal = chosenMessage.reveal.format(minutes))
+        return if (possibleMessages.isNotEmpty()) possibleMessages.random() 
+        else MessagePair(0L..Long.MAX_VALUE, R.string.insight_msg_tease_default, R.string.insight_msg_reveal_default)
     }
 }
 
@@ -312,12 +309,12 @@ fun InsightScreen(navController: NavController) {
     BackHandler(onBack = onClose)
 
     val messagePairSaver = Saver<MessagePair, List<Any>>(
-        save = { listOf(it.range.first, it.range.last, it.tease, it.reveal) },
+        save = { listOf(it.range.first, it.range.last, it.teaseRes, it.revealRes) },
         restore = {
             MessagePair(
                 range = (it[0] as Long)..(it[1] as Long),
-                tease = it[2] as String,
-                reveal = it[3] as String
+                teaseRes = it[2] as Int,
+                revealRes = it[3] as Int
             )
         }
     )
@@ -682,9 +679,9 @@ fun WrappedIntro(onNext: () -> Unit) {
             ) {
                 val baseStyle = TextStyle(fontFamily = bbh_bartle, textAlign = TextAlign.Center, letterSpacing = 2.sp, fontSize = 50.sp)
                 Box {
-                    AutoResizingText(text = "AvidTune Insight", modifier = Modifier.padding(start = 2.dp, top = 2.dp), style = baseStyle.copy(color = Color.DarkGray))
-                    AutoResizingText(text = "AvidTune Insight", modifier = Modifier.padding(start = 1.dp, top = 1.dp), style = baseStyle.copy(color = Color.Gray))
-                    AutoResizingText(text = "AvidTune Insight", modifier = Modifier, style = baseStyle.copy(color = Color.White))
+                    AutoResizingText(text = stringResource(R.string.insight_title), modifier = Modifier.padding(start = 2.dp, top = 2.dp), style = baseStyle.copy(color = Color.DarkGray))
+                    AutoResizingText(text = stringResource(R.string.insight_title), modifier = Modifier.padding(start = 1.dp, top = 1.dp), style = baseStyle.copy(color = Color.Gray))
+                    AutoResizingText(text = stringResource(R.string.insight_title), modifier = Modifier, style = baseStyle.copy(color = Color.White))
                 }
             }
             Spacer(modifier = Modifier.height(8.dp))
@@ -693,7 +690,7 @@ fun WrappedIntro(onNext: () -> Unit) {
                 enter = fadeIn(tween(1000, 600)) + slideInVertically(tween(1000, 600))
             ) {
                 Text(
-                    text = "A look back at your year in music.",
+                    text = stringResource(R.string.insight_intro_subtitle),
                     color = Color.White,
                     fontSize = 16.sp,
                     textAlign = TextAlign.Center
@@ -711,7 +708,7 @@ fun WrappedIntro(onNext: () -> Unit) {
                 colors = ButtonDefaults.buttonColors(containerColor = Color.White)
             ) {
                 Text(
-                    text = "Let's go!",
+                    text = stringResource(R.string.insight_lets_go),
                     color = Color.Black,
                     fontWeight = FontWeight.Bold,
                     modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp)
@@ -730,7 +727,7 @@ fun WrappedMinutesTease(messagePair: MessagePair?, onNavigateForward: () -> Unit
             enter = fadeIn(tween(1000)) + scaleIn(initialScale = 0.9f, animationSpec = tween(1000))
         ) {
             Text(
-                text = messagePair?.tease ?: "",
+                text = messagePair?.teaseRes?.let { stringResource(it) } ?: "",
                 modifier = Modifier.padding(horizontal = 24.dp),
                 color = Color.White,
                 fontSize = 30.sp,
@@ -756,7 +753,7 @@ fun WrappedMinutesScreen(messagePair: MessagePair?, totalMinutes: Long, isVisibl
             verticalArrangement = Arrangement.Center
         ) {
             FormattedText(
-                text = messagePair?.tease ?: "",
+                text = messagePair?.teaseRes?.let { stringResource(it) } ?: "",
                 modifier = Modifier.padding(horizontal = 24.dp),
                 style = MaterialTheme.typography.headlineSmall.copy(color = Color.White, textAlign = TextAlign.Center)
             )
@@ -780,7 +777,7 @@ fun WrappedMinutesScreen(messagePair: MessagePair?, totalMinutes: Long, isVisibl
             }
             Spacer(modifier = Modifier.height(16.dp))
             FormattedText(
-                text = messagePair?.reveal ?: "",
+                text = messagePair?.revealRes?.let { stringResource(it, totalMinutes) } ?: "",
                 modifier = Modifier.padding(horizontal = 24.dp),
                 style = MaterialTheme.typography.bodyLarge.copy(color = Color.White.copy(alpha = 0.8f), textAlign = TextAlign.Center)
             )
@@ -803,7 +800,7 @@ fun WrappedTotalSongsScreen(uniqueSongCount: Int, isVisible: Boolean) {
             verticalArrangement = Arrangement.Center
         ) {
             Text(
-                text = "Songs you\nlistened to",
+                text = stringResource(R.string.insight_total_songs_title),
                 modifier = Modifier.padding(horizontal = 24.dp),
                 style = MaterialTheme.typography.headlineSmall.copy(color = Color.White, textAlign = TextAlign.Center)
             )
@@ -827,7 +824,7 @@ fun WrappedTotalSongsScreen(uniqueSongCount: Int, isVisible: Boolean) {
             }
             Spacer(modifier = Modifier.height(16.dp))
             Text(
-                text = "That's a lot of melodies.",
+                text = stringResource(R.string.insight_total_songs_subtitle),
                 modifier = Modifier.padding(horizontal = 24.dp),
                 style = MaterialTheme.typography.bodyLarge.copy(color = Color.White.copy(alpha = 0.8f), textAlign = TextAlign.Center)
             )
@@ -850,7 +847,7 @@ fun WrappedTopSongScreen(topSong: SongWithStats?, isVisible: Boolean) {
                 enter = fadeIn(tween(1000, 200)) + slideInVertically(tween(1000, 200))
             ) {
                 Text(
-                    text = "But your absolute\nfavorite was...",
+                    text = stringResource(R.string.insight_top_song_title),
                     style = MaterialTheme.typography.headlineSmall.copy(color = Color.White),
                     textAlign = TextAlign.Center
                 )
@@ -873,7 +870,7 @@ fun WrappedTopSongScreen(topSong: SongWithStats?, isVisible: Boolean) {
                 enter = fadeIn(tween(1000, 600)) + slideInVertically(tween(1000, 600))
             ) {
                 Text(
-                    text = topSong?.title ?: "No Data",
+                    text = topSong?.title ?: stringResource(R.string.insight_no_data),
                     style = MaterialTheme.typography.headlineMedium.copy(color = Color.White),
                     fontWeight = FontWeight.Bold,
                     textAlign = TextAlign.Center
@@ -885,7 +882,7 @@ fun WrappedTopSongScreen(topSong: SongWithStats?, isVisible: Boolean) {
                 enter = fadeIn(tween(1000, 1000)) + slideInVertically(tween(1000, 1000))
             ) {
                 Text(
-                    text = "Listened for ${(topSong?.timeListened ?: 0) / 60000} minutes",
+                    text = stringResource(R.string.insight_listened_for_minutes, (topSong?.timeListened ?: 0) / 60000),
                     style = MaterialTheme.typography.bodyLarge.copy(color = Color.White.copy(alpha = 0.8f)),
                     textAlign = TextAlign.Center
                 )
@@ -910,7 +907,7 @@ fun WrappedTop5SongsScreen(topSongs: List<SongWithStats>, isVisible: Boolean) {
                 enter = fadeIn(tween(1000, 200)) + slideInVertically(tween(1000, 200))
             ) {
                 Text(
-                    text = "Your Top 5 Songs",
+                    text = stringResource(R.string.insight_top_5_songs),
                     fontSize = 40.sp,
                     fontFamily = bbh_bartle,
                     color = Color.White,
@@ -980,7 +977,7 @@ fun WrappedTotalAlbumsScreen(uniqueAlbumCount: Int, isVisible: Boolean) {
                 enter = fadeIn(tween(1000, 200)) + slideInVertically(tween(1000, 200))
             ) {
                 Text(
-                    text = "Albums you\ndiscovered",
+                    text = stringResource(R.string.insight_total_albums_title),
                     modifier = Modifier.padding(horizontal = 24.dp),
                     style = MaterialTheme.typography.headlineSmall.copy(color = Color.White, textAlign = TextAlign.Center)
                 )
@@ -1009,7 +1006,7 @@ fun WrappedTotalAlbumsScreen(uniqueAlbumCount: Int, isVisible: Boolean) {
                 enter = fadeIn(tween(1000, 600)) + slideInVertically(tween(1000, 600))
             ) {
                 Text(
-                    text = "That's a lot of skips and repeats.",
+                    text = stringResource(R.string.insight_total_albums_subtitle),
                     modifier = Modifier.padding(horizontal = 24.dp),
                     style = MaterialTheme.typography.bodyLarge.copy(color = Color.White.copy(alpha = 0.8f), textAlign = TextAlign.Center)
                 )
@@ -1034,7 +1031,7 @@ fun WrappedTopAlbumScreen(topAlbum: Album?, isVisible: Boolean) {
                 enter = fadeIn(tween(1000, 200)) + slideInVertically(tween(1000, 200))
             ) {
                 Text(
-                    text = "But there was one album\nthat ruled them all.",
+                    text = stringResource(R.string.insight_top_album_title),
                     style = TextStyle(fontFamily = bbh_bartle, fontSize = 40.sp, color = Color.White, textAlign = TextAlign.Center, lineHeight = 48.sp)
                 )
             }
@@ -1056,7 +1053,7 @@ fun WrappedTopAlbumScreen(topAlbum: Album?, isVisible: Boolean) {
                 enter = fadeIn(tween(1000, 600)) + slideInVertically(tween(1000, 600))
             ) {
                 Text(
-                    text = topAlbum?.album?.title ?: "No Data",
+                    text = topAlbum?.album?.title ?: stringResource(R.string.insight_no_data),
                     fontSize = 24.sp,
                     color = Color.White,
                     fontWeight = FontWeight.Bold,
@@ -1069,7 +1066,7 @@ fun WrappedTopAlbumScreen(topAlbum: Album?, isVisible: Boolean) {
                 enter = fadeIn(tween(1000, 800)) + slideInVertically(tween(1000, 800))
             ) {
                 Text(
-                    text = "Listened for ${(topAlbum?.timeListened ?: 0) / 60000} minutes",
+                    text = stringResource(R.string.insight_listened_for_minutes, (topAlbum?.timeListened ?: 0) / 60000),
                     fontSize = 16.sp,
                     color = Color.White.copy(alpha = 0.8f),
                     textAlign = TextAlign.Center
@@ -1095,7 +1092,7 @@ fun WrappedTop5AlbumsScreen(topAlbums: List<Album>, isVisible: Boolean) {
                 enter = fadeIn(tween(1000, 200)) + slideInVertically(tween(1000, 200))
             ) {
                 Text(
-                    text = "Your Top 5\nAlbums",
+                    text = stringResource(R.string.insight_top_5_albums),
                     style = TextStyle(fontFamily = bbh_bartle, fontSize = 48.sp, color = Color.White, textAlign = TextAlign.Center, lineHeight = 56.sp)
                 )
             }
@@ -1134,7 +1131,7 @@ fun WrappedTop5AlbumsScreen(topAlbums: List<Album>, isVisible: Boolean) {
                                     maxLines = 1
                                 )
                                 Text(
-                                    text = "${(album.timeListened ?: 0) / 60000} mins",
+                                    text = stringResource(R.string.insight_minutes_short, (album.timeListened ?: 0) / 60000),
                                     color = Color.White.copy(alpha = 0.7f),
                                     fontSize = 14.sp
                                 )
@@ -1161,7 +1158,7 @@ fun WrappedTotalArtistsScreen(uniqueArtistCount: Int, isVisible: Boolean) {
             verticalArrangement = Arrangement.Center
         ) {
             Text(
-                text = "Artists you\nlistened to",
+                text = stringResource(R.string.insight_total_artists_title),
                 modifier = Modifier.padding(horizontal = 24.dp),
                 style = MaterialTheme.typography.headlineSmall.copy(color = Color.White, textAlign = TextAlign.Center)
             )
@@ -1185,7 +1182,7 @@ fun WrappedTotalArtistsScreen(uniqueArtistCount: Int, isVisible: Boolean) {
             }
             Spacer(modifier = Modifier.height(16.dp))
             Text(
-                text = "Your music taste is quite diverse.",
+                text = stringResource(R.string.insight_total_artists_subtitle),
                 modifier = Modifier.padding(horizontal = 24.dp),
                 style = MaterialTheme.typography.bodyLarge.copy(color = Color.White.copy(alpha = 0.8f), textAlign = TextAlign.Center)
             )
@@ -1207,7 +1204,7 @@ fun WrappedTopArtistScreen(topArtist: Artist?, isVisible: Boolean) {
             enter = fadeIn(tween(1000, 200)) + slideInVertically(tween(1000, 200))
         ) {
             Text(
-                text = "Your Top Artist",
+                text = stringResource(R.string.insight_top_artist_title),
                 style = MaterialTheme.typography.headlineSmall.copy(color = Color.White),
                 textAlign = TextAlign.Center
             )
@@ -1230,7 +1227,7 @@ fun WrappedTopArtistScreen(topArtist: Artist?, isVisible: Boolean) {
             enter = fadeIn(tween(1000, 600)) + slideInVertically(tween(1000, 600))
         ) {
             Text(
-                text = topArtist?.artist?.name ?: "No Data",
+                text = topArtist?.artist?.name ?: stringResource(R.string.insight_no_data),
                 style = MaterialTheme.typography.headlineMedium.copy(color = Color.White),
                 fontWeight = FontWeight.Bold,
                 textAlign = TextAlign.Center
@@ -1241,7 +1238,7 @@ fun WrappedTopArtistScreen(topArtist: Artist?, isVisible: Boolean) {
             enter = fadeIn(tween(1000, 800)) + slideInVertically(tween(1000, 800))
         ) {
             Text(
-                text = "Listened for ${(topArtist?.timeListened ?: 0) / 60000} minutes",
+                text = stringResource(R.string.insight_listened_for_minutes, (topArtist?.timeListened ?: 0) / 60000),
                 style = MaterialTheme.typography.bodyLarge.copy(color = Color.White.copy(alpha = 0.8f)),
                 textAlign = TextAlign.Center
             )
@@ -1265,7 +1262,7 @@ fun WrappedTop5ArtistsScreen(topArtists: List<Artist>, isVisible: Boolean) {
                 enter = fadeIn(tween(1000, 200)) + slideInVertically(tween(1000, 200))
             ) {
                 Text(
-                    text = "Top 5 Artists",
+                    text = stringResource(R.string.insight_top_5_artists),
                     fontSize = 40.sp,
                     fontFamily = bbh_bartle,
                     color = Color.White,
@@ -1307,7 +1304,7 @@ fun WrappedTop5ArtistsScreen(topArtists: List<Artist>, isVisible: Boolean) {
                                     fontSize = 16.sp
                                 )
                                 Text(
-                                    text = "${(artist.timeListened ?: 0) / 60000} mins",
+                                    text = stringResource(R.string.insight_minutes_short, (artist.timeListened ?: 0) / 60000),
                                     color = Color.White.copy(alpha = 0.7f),
                                     fontSize = 14.sp
                                 )
@@ -1335,7 +1332,7 @@ fun PlaylistPage(state: WrappedState, onCreatePlaylist: () -> Unit) {
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             AutoResizingText(
-                text = "Your Insight Playlist\nis ready.",
+                text = stringResource(R.string.insight_playlist_ready),
                 style = TextStyle(fontFamily = bbh_bartle, fontSize = 40.sp, color = Color.White, textAlign = TextAlign.Center, lineHeight = 48.sp)
             )
             Spacer(modifier = Modifier.height(32.dp))
@@ -1346,7 +1343,7 @@ fun PlaylistPage(state: WrappedState, onCreatePlaylist: () -> Unit) {
             )
             Spacer(modifier = Modifier.height(24.dp))
             Text(
-                text = "AvidTune Insight ${WrappedConstants.YEAR}",
+                text = stringResource(R.string.insight_playlist_name, WrappedConstants.YEAR),
                 style = TextStyle(fontSize = 22.sp, fontWeight = FontWeight.Bold, color = Color.White)
             )
             Spacer(modifier = Modifier.height(48.dp))
@@ -1357,9 +1354,9 @@ fun PlaylistPage(state: WrappedState, onCreatePlaylist: () -> Unit) {
                 modifier = Modifier.height(50.dp)
             ) {
                 when (playlistCreationState) {
-                    is PlaylistCreationState.Idle -> Text("Add to Library", style = TextStyle(color = Color.Black, fontWeight = FontWeight.Bold))
+                    is PlaylistCreationState.Idle -> Text(stringResource(R.string.insight_add_to_library), style = TextStyle(color = Color.Black, fontWeight = FontWeight.Bold))
                     is PlaylistCreationState.Creating -> CircularProgressIndicator(modifier = Modifier.size(24.dp), color = Color.Black, strokeWidth = 2.dp)
-                    is PlaylistCreationState.Success -> Text("Saved!", style = TextStyle(color = Color.Black, fontWeight = FontWeight.Bold))
+                    is PlaylistCreationState.Success -> Text(stringResource(R.string.insight_saved), style = TextStyle(color = Color.Black, fontWeight = FontWeight.Bold))
                 }
             }
         }
@@ -1383,12 +1380,12 @@ fun ConclusionPage(onClose: () -> Unit) {
             )
             Spacer(modifier = Modifier.height(24.dp))
             Text(
-                text = "Thank you for listening",
+                text = stringResource(R.string.insight_thank_you),
                 style = TextStyle(fontSize = 28.sp, fontWeight = FontWeight.Bold, color = Color.White)
             )
             Spacer(modifier = Modifier.height(8.dp))
             Text(
-                text = "See you next time!",
+                text = stringResource(R.string.insight_see_you),
                 style = TextStyle(fontSize = 16.sp, color = Color.Gray)
             )
             Spacer(modifier = Modifier.height(48.dp))
@@ -1398,7 +1395,7 @@ fun ConclusionPage(onClose: () -> Unit) {
                 colors = ButtonDefaults.buttonColors(containerColor = Color.White)
             ) {
                 Text(
-                    text = "Close Insight",
+                    text = stringResource(R.string.insight_close),
                     style = TextStyle(color = Color.Black, fontWeight = FontWeight.Bold)
                 )
             }
