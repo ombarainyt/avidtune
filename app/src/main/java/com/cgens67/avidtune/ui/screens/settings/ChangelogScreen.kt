@@ -161,12 +161,12 @@ fun ChangelogScreen(
                 Tab(
                     selected = selectedTab == 0,
                     onClick = { selectedTab = 0 },
-                    text = { Text("Releases", fontWeight = FontWeight.SemiBold) }
+                    text = { Text(stringResource(R.string.tab_releases), fontWeight = FontWeight.SemiBold) }
                 )
                 Tab(
                     selected = selectedTab == 1,
                     onClick = { selectedTab = 1 },
-                    text = { Text("Commits", fontWeight = FontWeight.SemiBold) }
+                    text = { Text(stringResource(R.string.tab_commits), fontWeight = FontWeight.SemiBold) }
                 )
             }
 
@@ -194,9 +194,10 @@ fun ReleasesContent(versionTag: String) {
     var showingCached by remember { mutableStateOf(false) }
     val coroutineScope = rememberCoroutineScope()
 
+    val currentVersionStr = stringResource(R.string.current_version)
     var currentVersionTag by remember { mutableStateOf(versionTag) }
     var availableReleases by remember { mutableStateOf<List<ReleaseMetadata>>(
-        listOf(ReleaseMetadata(versionTag, versionTag, "Current", null))
+        listOf(ReleaseMetadata(versionTag, versionTag, currentVersionStr, null))
     ) }
     var isFetchingOldReleases by remember { mutableStateOf(false) }
 
@@ -365,7 +366,7 @@ fun ReleasesContent(versionTag: String) {
                         if (currentFromList != null) {
                             availableReleases = list
                         } else {
-                            val currentVersion = ReleaseMetadata(currentVersionTag, currentVersionTag, "Current", null)
+                            val currentVersion = ReleaseMetadata(currentVersionTag, currentVersionTag, context.getString(R.string.current_version), null)
                             availableReleases = (listOf(currentVersion) + list).distinctBy { it.tagName }
                         }
                         isFetchingOldReleases = false
@@ -457,7 +458,7 @@ fun ReleasesContent(versionTag: String) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(24.dp)) {
                         Icon(Icons.Default.Error, null, tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(48.dp))
                         Spacer(Modifier.height(16.dp))
-                        Text("Error loading changelog", color = MaterialTheme.colorScheme.error, fontWeight = FontWeight.Bold)
+                        Text(stringResource(R.string.error_loading_changelog), color = MaterialTheme.colorScheme.error, fontWeight = FontWeight.Bold)
                         
                         detailedError?.let { detail ->
                             Spacer(Modifier.height(8.dp))
@@ -477,7 +478,7 @@ fun ReleasesContent(versionTag: String) {
                         
                         Spacer(Modifier.height(24.dp))
                         Button(onClick = { fetchChangelog(currentVersionTag) }) {
-                            Text("Retry")
+                            Text(stringResource(R.string.action_retry))
                         }
                     }
                 }
@@ -502,7 +503,7 @@ fun ReleasesContent(versionTag: String) {
                             )
                             if (showingCached) {
                                 Surface(color = MaterialTheme.colorScheme.primaryContainer, shape = RoundedCornerShape(8.dp)) {
-                                    Text("Cached", style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp))
+                                    Text(stringResource(R.string.cached), style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp))
                                 }
                             }
                         }
@@ -675,7 +676,7 @@ fun CommitsContent() {
                     val message = fullMessage.lines().firstOrNull { it.isNotBlank() } ?: fullMessage
 
                     val authorObj = commitObj.getJSONObject("author")
-                    val authorName = authorObj.optString("name", "Unknown")
+                    val authorName = authorObj.optString("name").takeIf { it.isNotEmpty() } ?: context.getString(R.string.unknown)
                     val rawDate = authorObj.optString("date", "")
                     val formattedDate = try {
                         ZonedDateTime.parse(rawDate).format(outputFormatter)
@@ -732,7 +733,7 @@ fun CommitsContent() {
                         )
                         Spacer(Modifier.height(16.dp))
                         Text(
-                            text = "Error loading commits",
+                            text = stringResource(R.string.error_loading_commits),
                             color = MaterialTheme.colorScheme.error
                         )
                     }
