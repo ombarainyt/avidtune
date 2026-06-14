@@ -147,7 +147,7 @@ data class MessagePair(val range: LongRange, val tease: String, val reveal: Stri
 
 object WrappedRepository {
     private val messages = listOf(
-        MessagePair(0L..999L, "I really hope you are not disappointed...", "That's **%d minutes**. Just warming up?"),
+        MessagePair(0L..999L, "I really hope you are not dissapointed...", "That's **%d minutes**. Just warming up?"),
         MessagePair(1000L..4999L, "It seems like you found us recently...", "And you dedicated **%d minutes** to the tunes."),
         MessagePair(5000L..14999L, "Music is definitely your thing.", "**%d minutes** is a solid soundtrack for your year."),
         MessagePair(15000L..39999L, "Do you ever take your headphones off?", "**%d minutes** suggests music is your oxygen."),
@@ -666,7 +666,7 @@ fun WrappedIntro(onNext: () -> Unit) {
         ) {
             AnimatedVisibility(
                 visible = visible,
-                enter = fadeIn(tween(1000, 200)) + slideInVertically(animationSpec = tween(1000, 200)) { -80 }
+                enter = fadeIn(tween(1000, 200)) + slideInVertically(tween(1000, 200))
             ) {
                 Image(
                     painter = painterResource(R.drawable.avidtune),
@@ -678,7 +678,7 @@ fun WrappedIntro(onNext: () -> Unit) {
             Spacer(modifier = Modifier.height(16.dp))
             AnimatedVisibility(
                 visible = visible,
-                enter = fadeIn(tween(1000, 400)) + slideInVertically(animationSpec = tween(1000, 400)) { -80 }
+                enter = fadeIn(tween(1000, 400)) + slideInVertically(tween(1000, 400))
             ) {
                 val baseStyle = TextStyle(fontFamily = bbh_bartle, textAlign = TextAlign.Center, letterSpacing = 2.sp, fontSize = 50.sp)
                 Box {
@@ -690,7 +690,7 @@ fun WrappedIntro(onNext: () -> Unit) {
             Spacer(modifier = Modifier.height(8.dp))
             AnimatedVisibility(
                 visible = visible,
-                enter = fadeIn(tween(1000, 600)) + slideInVertically(animationSpec = tween(1000, 600)) { -80 }
+                enter = fadeIn(tween(1000, 600)) + slideInVertically(tween(1000, 600))
             ) {
                 Text(
                     text = "A look back at your year in music.",
@@ -702,7 +702,7 @@ fun WrappedIntro(onNext: () -> Unit) {
         }
         AnimatedVisibility(
             visible = visible,
-            enter = fadeIn(tween(1000, 1000)) + slideInVertically(animationSpec = tween(1000, 1000)) { -80 },
+            enter = fadeIn(tween(1000, 1000)) + slideInVertically(tween(1000, 1000)),
             modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 64.dp)
         ) {
             Button(
@@ -733,8 +733,7 @@ fun WrappedMinutesTease(messagePair: MessagePair?, onNavigateForward: () -> Unit
                 text = messagePair?.tease ?: "",
                 modifier = Modifier.padding(horizontal = 24.dp),
                 color = Color.White,
-                fontSize = 24.sp,
-                lineHeight = 32.sp,
+                fontSize = 30.sp,
                 textAlign = TextAlign.Center,
                 fontFamily = bbh_bartle
             )
@@ -746,13 +745,8 @@ fun WrappedMinutesTease(messagePair: MessagePair?, onNavigateForward: () -> Unit
 fun WrappedMinutesScreen(messagePair: MessagePair?, totalMinutes: Long, isVisible: Boolean) {
     val animatedMinutes = remember { Animatable(0f) }
     val textMeasurer = rememberTextMeasurer()
-    var visible by remember { mutableStateOf(false) }
-    
     LaunchedEffect(isVisible, totalMinutes) {
-        if (isVisible) {
-            visible = true
-            if (totalMinutes > 0) animatedMinutes.animateTo(targetValue = totalMinutes.toFloat(), animationSpec = tween(1500, easing = FastOutSlowInEasing))
-        }
+        if (isVisible && totalMinutes > 0) animatedMinutes.animateTo(targetValue = totalMinutes.toFloat(), animationSpec = tween(1500, easing = FastOutSlowInEasing))
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
@@ -761,50 +755,35 @@ fun WrappedMinutesScreen(messagePair: MessagePair?, totalMinutes: Long, isVisibl
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center
         ) {
-            AnimatedVisibility(
-                visible = visible,
-                enter = fadeIn(tween(1000, 200)) + slideInVertically(animationSpec = tween(1000, 200)) { -80 }
-            ) {
-                FormattedText(
-                    text = messagePair?.tease ?: "",
-                    modifier = Modifier.padding(horizontal = 24.dp),
-                    style = MaterialTheme.typography.headlineSmall.copy(color = Color.White, textAlign = TextAlign.Center, fontFamily = bbh_bartle, fontSize = 24.sp)
-                )
-            }
+            FormattedText(
+                text = messagePair?.tease ?: "",
+                modifier = Modifier.padding(horizontal = 24.dp),
+                style = MaterialTheme.typography.headlineSmall.copy(color = Color.White, textAlign = TextAlign.Center)
+            )
             Spacer(modifier = Modifier.height(32.dp))
-            AnimatedVisibility(
-                visible = visible,
-                enter = fadeIn(tween(1000, 400)) + slideInVertically(animationSpec = tween(1000, 400)) { -80 }
-            ) {
-                BoxWithConstraints(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
-                    val density = LocalDensity.current
-                    val baseStyle = MaterialTheme.typography.displayLarge.copy(color = Color.White, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center, fontFamily = bbh_bartle, drawStyle = Stroke(with(density) { 2.dp.toPx() }))
-                    val textStyle = remember(totalMinutes, maxWidth) {
-                        var style = baseStyle.copy(fontSize = 96.sp)
-                        var textWidth = textMeasurer.measure(totalMinutes.toString(), style).size.width
-                        while (textWidth > constraints.maxWidth) { style = style.copy(fontSize = style.fontSize * 0.95f); textWidth = textMeasurer.measure(totalMinutes.toString(), style).size.width }
-                        style.copy(lineHeight = style.fontSize * 1.08f)
-                    }
-                    Text(
-                        text = animatedMinutes.value.toInt().toString(),
-                        style = textStyle,
-                        maxLines = 1,
-                        modifier = Modifier.fillMaxWidth(),
-                        textAlign = TextAlign.Center
-                    )
+            BoxWithConstraints(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
+                val density = LocalDensity.current
+                val baseStyle = MaterialTheme.typography.displayLarge.copy(color = Color.White, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center, fontFamily = bbh_bartle, drawStyle = Stroke(with(density) { 2.dp.toPx() }))
+                val textStyle = remember(totalMinutes, maxWidth) {
+                    var style = baseStyle.copy(fontSize = 96.sp)
+                    var textWidth = textMeasurer.measure(totalMinutes.toString(), style).size.width
+                    while (textWidth > constraints.maxWidth) { style = style.copy(fontSize = style.fontSize * 0.95f); textWidth = textMeasurer.measure(totalMinutes.toString(), style).size.width }
+                    style.copy(lineHeight = style.fontSize * 1.08f)
                 }
+                Text(
+                    text = animatedMinutes.value.toInt().toString(),
+                    style = textStyle,
+                    maxLines = 1,
+                    modifier = Modifier.fillMaxWidth(),
+                    textAlign = TextAlign.Center
+                )
             }
             Spacer(modifier = Modifier.height(16.dp))
-            AnimatedVisibility(
-                visible = visible,
-                enter = fadeIn(tween(1000, 600)) + slideInVertically(animationSpec = tween(1000, 600)) { -80 }
-            ) {
-                FormattedText(
-                    text = messagePair?.reveal ?: "",
-                    modifier = Modifier.padding(horizontal = 24.dp),
-                    style = MaterialTheme.typography.bodyLarge.copy(color = Color.White.copy(alpha = 0.8f), textAlign = TextAlign.Center)
-                )
-            }
+            FormattedText(
+                text = messagePair?.reveal ?: "",
+                modifier = Modifier.padding(horizontal = 24.dp),
+                style = MaterialTheme.typography.bodyLarge.copy(color = Color.White.copy(alpha = 0.8f), textAlign = TextAlign.Center)
+            )
         }
     }
 }
@@ -813,15 +792,9 @@ fun WrappedMinutesScreen(messagePair: MessagePair?, totalMinutes: Long, isVisibl
 fun WrappedTotalSongsScreen(uniqueSongCount: Int, isVisible: Boolean) {
     val animatedSongs = remember { Animatable(0f) }
     val textMeasurer = rememberTextMeasurer()
-    var visible by remember { mutableStateOf(false) }
-    
     LaunchedEffect(isVisible, uniqueSongCount) {
-        if (isVisible) {
-            visible = true
-            if (uniqueSongCount > 0) animatedSongs.animateTo(targetValue = uniqueSongCount.toFloat(), animationSpec = tween(1500, easing = FastOutSlowInEasing))
-        }
+        if (isVisible && uniqueSongCount > 0) animatedSongs.animateTo(targetValue = uniqueSongCount.toFloat(), animationSpec = tween(1500, easing = FastOutSlowInEasing))
     }
-    
     Box(modifier = Modifier.fillMaxSize()) {
         AnimatedBackground(shapeTypes = listOf(ShapeType.Line))
         Column(
@@ -829,50 +802,35 @@ fun WrappedTotalSongsScreen(uniqueSongCount: Int, isVisible: Boolean) {
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center
         ) {
-            AnimatedVisibility(
-                visible = visible,
-                enter = fadeIn(tween(1000, 200)) + slideInVertically(animationSpec = tween(1000, 200)) { -80 }
-            ) {
-                Text(
-                    text = "Songs you\nlistened to",
-                    modifier = Modifier.padding(horizontal = 24.dp),
-                    style = MaterialTheme.typography.headlineSmall.copy(color = Color.White, textAlign = TextAlign.Center, fontFamily = bbh_bartle, fontSize = 32.sp)
-                )
-            }
+            Text(
+                text = "Songs you\nlistened to",
+                modifier = Modifier.padding(horizontal = 24.dp),
+                style = MaterialTheme.typography.headlineSmall.copy(color = Color.White, textAlign = TextAlign.Center)
+            )
             Spacer(modifier = Modifier.height(32.dp))
-            AnimatedVisibility(
-                visible = visible,
-                enter = fadeIn(tween(1000, 400)) + slideInVertically(animationSpec = tween(1000, 400)) { -80 }
-            ) {
-                BoxWithConstraints(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
-                    val density = LocalDensity.current
-                    val baseStyle = MaterialTheme.typography.displayLarge.copy(color = Color.White, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center, fontFamily = bbh_bartle, drawStyle = Stroke(with(density) { 2.dp.toPx() }))
-                    val textStyle = remember(uniqueSongCount, maxWidth) {
-                        var style = baseStyle.copy(fontSize = 96.sp)
-                        var textWidth = textMeasurer.measure(uniqueSongCount.toString(), style).size.width
-                        while (textWidth > constraints.maxWidth) { style = style.copy(fontSize = style.fontSize * 0.95f); textWidth = textMeasurer.measure(uniqueSongCount.toString(), style).size.width }
-                        style.copy(lineHeight = style.fontSize * 1.08f)
-                    }
-                    Text(
-                        text = animatedSongs.value.toInt().toString(),
-                        style = textStyle,
-                        maxLines = 1,
-                        modifier = Modifier.fillMaxWidth(),
-                        textAlign = TextAlign.Center
-                    )
+            BoxWithConstraints(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
+                val density = LocalDensity.current
+                val baseStyle = MaterialTheme.typography.displayLarge.copy(color = Color.White, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center, fontFamily = bbh_bartle, drawStyle = Stroke(with(density) { 2.dp.toPx() }))
+                val textStyle = remember(uniqueSongCount, maxWidth) {
+                    var style = baseStyle.copy(fontSize = 96.sp)
+                    var textWidth = textMeasurer.measure(uniqueSongCount.toString(), style).size.width
+                    while (textWidth > constraints.maxWidth) { style = style.copy(fontSize = style.fontSize * 0.95f); textWidth = textMeasurer.measure(uniqueSongCount.toString(), style).size.width }
+                    style.copy(lineHeight = style.fontSize * 1.08f)
                 }
+                Text(
+                    text = animatedSongs.value.toInt().toString(),
+                    style = textStyle,
+                    maxLines = 1,
+                    modifier = Modifier.fillMaxWidth(),
+                    textAlign = TextAlign.Center
+                )
             }
             Spacer(modifier = Modifier.height(16.dp))
-            AnimatedVisibility(
-                visible = visible,
-                enter = fadeIn(tween(1000, 600)) + slideInVertically(animationSpec = tween(1000, 600)) { -80 }
-            ) {
-                Text(
-                    text = "That's a lot of melodies.",
-                    modifier = Modifier.padding(horizontal = 24.dp),
-                    style = MaterialTheme.typography.bodyLarge.copy(color = Color.White.copy(alpha = 0.8f), textAlign = TextAlign.Center)
-                )
-            }
+            Text(
+                text = "That's a lot of melodies.",
+                modifier = Modifier.padding(horizontal = 24.dp),
+                style = MaterialTheme.typography.bodyLarge.copy(color = Color.White.copy(alpha = 0.8f), textAlign = TextAlign.Center)
+            )
         }
     }
 }
@@ -889,7 +847,7 @@ fun WrappedTopSongScreen(topSong: SongWithStats?, isVisible: Boolean) {
         ) {
             AnimatedVisibility(
                 visible = visible,
-                enter = fadeIn(tween(1000, 200)) + slideInVertically(animationSpec = tween(1000, 200)) { -80 }
+                enter = fadeIn(tween(1000, 200)) + slideInVertically(tween(1000, 200))
             ) {
                 Text(
                     text = "But your absolute\nfavorite was...",
@@ -900,7 +858,7 @@ fun WrappedTopSongScreen(topSong: SongWithStats?, isVisible: Boolean) {
             Spacer(modifier = Modifier.height(32.dp))
             AnimatedVisibility(
                 visible = visible,
-                enter = fadeIn(tween(1000, 400)) + slideInVertically(animationSpec = tween(1000, 400)) { -80 }
+                enter = fadeIn(tween(1000, 400)) + slideInVertically(tween(1000, 400))
             ) {
                 AsyncImage(
                     model = ImageRequest.Builder(LocalContext.current).data(topSong?.thumbnailUrl).build(),
@@ -912,7 +870,7 @@ fun WrappedTopSongScreen(topSong: SongWithStats?, isVisible: Boolean) {
             Spacer(modifier = Modifier.height(16.dp))
             AnimatedVisibility(
                 visible = visible,
-                enter = fadeIn(tween(1000, 600)) + slideInVertically(animationSpec = tween(1000, 600)) { -80 }
+                enter = fadeIn(tween(1000, 600)) + slideInVertically(tween(1000, 600))
             ) {
                 Text(
                     text = topSong?.title ?: "No Data",
@@ -924,7 +882,7 @@ fun WrappedTopSongScreen(topSong: SongWithStats?, isVisible: Boolean) {
             Spacer(modifier = Modifier.height(8.dp))
             AnimatedVisibility(
                 visible = visible,
-                enter = fadeIn(tween(1000, 1000)) + slideInVertically(animationSpec = tween(1000, 1000)) { -80 }
+                enter = fadeIn(tween(1000, 1000)) + slideInVertically(tween(1000, 1000))
             ) {
                 Text(
                     text = "Listened for ${(topSong?.timeListened ?: 0) / 60000} minutes",
@@ -949,15 +907,15 @@ fun WrappedTop5SongsScreen(topSongs: List<SongWithStats>, isVisible: Boolean) {
         ) {
             AnimatedVisibility(
                 visible = visible,
-                enter = fadeIn(tween(1000, 200)) + slideInVertically(animationSpec = tween(1000, 200)) { -80 }
+                enter = fadeIn(tween(1000, 200)) + slideInVertically(tween(1000, 200))
             ) {
                 Text(
                     text = "Your Top 5 Songs",
-                    fontSize = 36.sp,
+                    fontSize = 40.sp,
                     fontFamily = bbh_bartle,
                     color = Color.White,
                     textAlign = TextAlign.Center,
-                    lineHeight = 40.sp
+                    lineHeight = 44.sp
                 )
             }
             Spacer(modifier = Modifier.height(32.dp))
@@ -965,7 +923,7 @@ fun WrappedTop5SongsScreen(topSongs: List<SongWithStats>, isVisible: Boolean) {
                 topSongs.forEachIndexed { index, song ->
                     AnimatedVisibility(
                         visible = visible,
-                        enter = fadeIn(tween(600, 400 + (index * 200))) + slideInVertically(animationSpec = tween(600, 400 + (index * 200))) { -50 }
+                        enter = fadeIn(tween(600, 400 + (index * 200))) + slideInVertically(tween(600, 400 + (index * 200)))
                     ) {
                         Row(
                             modifier = Modifier.padding(vertical = 8.dp),
@@ -1007,14 +965,9 @@ fun WrappedTotalAlbumsScreen(uniqueAlbumCount: Int, isVisible: Boolean) {
     val animatedAlbums = remember { Animatable(0f) }
     val textMeasurer = rememberTextMeasurer()
     var visible by remember { mutableStateOf(false) }
-    
     LaunchedEffect(isVisible, uniqueAlbumCount) {
-        if (isVisible) { 
-            visible = true
-            if (uniqueAlbumCount > 0) animatedAlbums.animateTo(targetValue = uniqueAlbumCount.toFloat(), animationSpec = tween(1500, easing = FastOutSlowInEasing)) 
-        }
+        if (isVisible) { visible = true; if (uniqueAlbumCount > 0) animatedAlbums.animateTo(targetValue = uniqueAlbumCount.toFloat(), animationSpec = tween(1500, easing = FastOutSlowInEasing)) }
     }
-    
     Box(modifier = Modifier.fillMaxSize()) {
         AnimatedBackground(shapeTypes = listOf(ShapeType.Circle))
         Column(
@@ -1024,41 +977,36 @@ fun WrappedTotalAlbumsScreen(uniqueAlbumCount: Int, isVisible: Boolean) {
         ) {
             AnimatedVisibility(
                 visible = visible,
-                enter = fadeIn(tween(1000, 200)) + slideInVertically(animationSpec = tween(1000, 200)) { -80 }
+                enter = fadeIn(tween(1000, 200)) + slideInVertically(tween(1000, 200))
             ) {
                 Text(
                     text = "Albums you\ndiscovered",
                     modifier = Modifier.padding(horizontal = 24.dp),
-                    style = MaterialTheme.typography.headlineSmall.copy(color = Color.White, textAlign = TextAlign.Center, fontFamily = bbh_bartle, fontSize = 32.sp)
+                    style = MaterialTheme.typography.headlineSmall.copy(color = Color.White, textAlign = TextAlign.Center)
                 )
             }
             Spacer(modifier = Modifier.height(32.dp))
-            AnimatedVisibility(
-                visible = visible,
-                enter = fadeIn(tween(1000, 400)) + slideInVertically(animationSpec = tween(1000, 400)) { -80 }
-            ) {
-                BoxWithConstraints(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
-                    val density = LocalDensity.current
-                    val baseStyle = MaterialTheme.typography.displayLarge.copy(color = Color.White, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center, fontFamily = bbh_bartle, drawStyle = Stroke(with(density) { 2.dp.toPx() }))
-                    val textStyle = remember(uniqueAlbumCount, maxWidth) {
-                        var style = baseStyle.copy(fontSize = 96.sp)
-                        var textWidth = textMeasurer.measure(uniqueAlbumCount.toString(), style).size.width
-                        while (textWidth > constraints.maxWidth) { style = style.copy(fontSize = style.fontSize * 0.95f); textWidth = textMeasurer.measure(uniqueAlbumCount.toString(), style).size.width }
-                        style.copy(lineHeight = style.fontSize * 1.08f)
-                    }
-                    Text(
-                        text = animatedAlbums.value.toInt().toString(),
-                        style = textStyle,
-                        maxLines = 1,
-                        modifier = Modifier.fillMaxWidth(),
-                        textAlign = TextAlign.Center
-                    )
+            BoxWithConstraints(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
+                val density = LocalDensity.current
+                val baseStyle = MaterialTheme.typography.displayLarge.copy(color = Color.White, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center, fontFamily = bbh_bartle, drawStyle = Stroke(with(density) { 2.dp.toPx() }))
+                val textStyle = remember(uniqueAlbumCount, maxWidth) {
+                    var style = baseStyle.copy(fontSize = 96.sp)
+                    var textWidth = textMeasurer.measure(uniqueAlbumCount.toString(), style).size.width
+                    while (textWidth > constraints.maxWidth) { style = style.copy(fontSize = style.fontSize * 0.95f); textWidth = textMeasurer.measure(uniqueAlbumCount.toString(), style).size.width }
+                    style.copy(lineHeight = style.fontSize * 1.08f)
                 }
+                Text(
+                    text = animatedAlbums.value.toInt().toString(),
+                    style = textStyle,
+                    maxLines = 1,
+                    modifier = Modifier.fillMaxWidth(),
+                    textAlign = TextAlign.Center
+                )
             }
             Spacer(modifier = Modifier.height(16.dp))
             AnimatedVisibility(
                 visible = visible,
-                enter = fadeIn(tween(1000, 600)) + slideInVertically(animationSpec = tween(1000, 600)) { -80 }
+                enter = fadeIn(tween(1000, 600)) + slideInVertically(tween(1000, 600))
             ) {
                 Text(
                     text = "That's a lot of skips and repeats.",
@@ -1083,17 +1031,17 @@ fun WrappedTopAlbumScreen(topAlbum: Album?, isVisible: Boolean) {
         ) {
             AnimatedVisibility(
                 visible = visible,
-                enter = fadeIn(tween(1000, 200)) + slideInVertically(animationSpec = tween(1000, 200)) { -80 }
+                enter = fadeIn(tween(1000, 200)) + slideInVertically(tween(1000, 200))
             ) {
                 Text(
                     text = "But there was one album\nthat ruled them all.",
-                    style = TextStyle(fontFamily = bbh_bartle, fontSize = 32.sp, color = Color.White, textAlign = TextAlign.Center, lineHeight = 40.sp)
+                    style = TextStyle(fontFamily = bbh_bartle, fontSize = 40.sp, color = Color.White, textAlign = TextAlign.Center, lineHeight = 48.sp)
                 )
             }
             Spacer(modifier = Modifier.height(32.dp))
             AnimatedVisibility(
                 visible = visible,
-                enter = fadeIn(tween(1000, 400)) + slideInVertically(animationSpec = tween(1000, 400)) { -80 }
+                enter = fadeIn(tween(1000, 400)) + slideInVertically(tween(1000, 400))
             ) {
                 AsyncImage(
                     model = topAlbum?.album?.thumbnailUrl,
@@ -1105,7 +1053,7 @@ fun WrappedTopAlbumScreen(topAlbum: Album?, isVisible: Boolean) {
             Spacer(modifier = Modifier.height(16.dp))
             AnimatedVisibility(
                 visible = visible,
-                enter = fadeIn(tween(1000, 600)) + slideInVertically(animationSpec = tween(1000, 600)) { -80 }
+                enter = fadeIn(tween(1000, 600)) + slideInVertically(tween(1000, 600))
             ) {
                 Text(
                     text = topAlbum?.album?.title ?: "No Data",
@@ -1118,7 +1066,7 @@ fun WrappedTopAlbumScreen(topAlbum: Album?, isVisible: Boolean) {
             Spacer(modifier = Modifier.height(8.dp))
             AnimatedVisibility(
                 visible = visible,
-                enter = fadeIn(tween(1000, 800)) + slideInVertically(animationSpec = tween(1000, 800)) { -80 }
+                enter = fadeIn(tween(1000, 800)) + slideInVertically(tween(1000, 800))
             ) {
                 Text(
                     text = "Listened for ${(topAlbum?.timeListened ?: 0) / 60000} minutes",
@@ -1144,11 +1092,11 @@ fun WrappedTop5AlbumsScreen(topAlbums: List<Album>, isVisible: Boolean) {
         ) {
             AnimatedVisibility(
                 visible = visible,
-                enter = fadeIn(tween(1000, 200)) + slideInVertically(animationSpec = tween(1000, 200)) { -80 }
+                enter = fadeIn(tween(1000, 200)) + slideInVertically(tween(1000, 200))
             ) {
                 Text(
                     text = "Your Top 5\nAlbums",
-                    style = TextStyle(fontFamily = bbh_bartle, fontSize = 36.sp, color = Color.White, textAlign = TextAlign.Center, lineHeight = 40.sp)
+                    style = TextStyle(fontFamily = bbh_bartle, fontSize = 48.sp, color = Color.White, textAlign = TextAlign.Center, lineHeight = 56.sp)
                 )
             }
             Spacer(modifier = Modifier.height(32.dp))
@@ -1156,7 +1104,7 @@ fun WrappedTop5AlbumsScreen(topAlbums: List<Album>, isVisible: Boolean) {
                 topAlbums.forEachIndexed { index, album ->
                     AnimatedVisibility(
                         visible = visible,
-                        enter = fadeIn(tween(600, 400 + (index * 200))) + slideInVertically(animationSpec = tween(600, 400 + (index * 200))) { -50 }
+                        enter = fadeIn(tween(600, 400 + (index * 200))) + slideInVertically(tween(600, 400 + (index * 200)))
                     ) {
                         Row(
                             modifier = Modifier.padding(vertical = 8.dp),
@@ -1203,65 +1151,44 @@ fun WrappedTop5AlbumsScreen(topAlbums: List<Album>, isVisible: Boolean) {
 fun WrappedTotalArtistsScreen(uniqueArtistCount: Int, isVisible: Boolean) {
     val animatedArtists = remember { Animatable(0f) }
     val textMeasurer = rememberTextMeasurer()
-    var visible by remember { mutableStateOf(false) }
-    
     LaunchedEffect(isVisible, uniqueArtistCount) {
-        if (isVisible) {
-            visible = true
-            if (uniqueArtistCount > 0) animatedArtists.animateTo(targetValue = uniqueArtistCount.toFloat(), animationSpec = tween(1500, easing = FastOutSlowInEasing))
-        }
+        if (isVisible && uniqueArtistCount > 0) animatedArtists.animateTo(targetValue = uniqueArtistCount.toFloat(), animationSpec = tween(1500, easing = FastOutSlowInEasing))
     }
-    
     Box(modifier = Modifier.fillMaxSize()) {
         Column(
             modifier = Modifier.fillMaxSize().padding(vertical = 32.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center
         ) {
-            AnimatedVisibility(
-                visible = visible,
-                enter = fadeIn(tween(1000, 200)) + slideInVertically(animationSpec = tween(1000, 200)) { -80 }
-            ) {
-                Text(
-                    text = "Artists you\nlistened to",
-                    modifier = Modifier.padding(horizontal = 24.dp),
-                    style = MaterialTheme.typography.headlineSmall.copy(color = Color.White, textAlign = TextAlign.Center, fontFamily = bbh_bartle, fontSize = 32.sp)
-                )
-            }
+            Text(
+                text = "Artists you\nlistened to",
+                modifier = Modifier.padding(horizontal = 24.dp),
+                style = MaterialTheme.typography.headlineSmall.copy(color = Color.White, textAlign = TextAlign.Center)
+            )
             Spacer(modifier = Modifier.height(32.dp))
-            AnimatedVisibility(
-                visible = visible,
-                enter = fadeIn(tween(1000, 400)) + slideInVertically(animationSpec = tween(1000, 400)) { -80 }
-            ) {
-                BoxWithConstraints(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
-                    val density = LocalDensity.current
-                    val baseStyle = MaterialTheme.typography.displayLarge.copy(color = Color.White, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center, fontFamily = bbh_bartle, drawStyle = Stroke(with(density) { 2.dp.toPx() }))
-                    val textStyle = remember(uniqueArtistCount, maxWidth) {
-                        var style = baseStyle.copy(fontSize = 96.sp)
-                        var textWidth = textMeasurer.measure(uniqueArtistCount.toString(), style).size.width
-                        while (textWidth > constraints.maxWidth) { style = style.copy(fontSize = style.fontSize * 0.95f); textWidth = textMeasurer.measure(uniqueArtistCount.toString(), style).size.width }
-                        style.copy(lineHeight = style.fontSize * 1.08f)
-                    }
-                    Text(
-                        text = animatedArtists.value.toInt().toString(),
-                        style = textStyle,
-                        maxLines = 1,
-                        modifier = Modifier.fillMaxWidth(),
-                        textAlign = TextAlign.Center
-                    )
+            BoxWithConstraints(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
+                val density = LocalDensity.current
+                val baseStyle = MaterialTheme.typography.displayLarge.copy(color = Color.White, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center, fontFamily = bbh_bartle, drawStyle = Stroke(with(density) { 2.dp.toPx() }))
+                val textStyle = remember(uniqueArtistCount, maxWidth) {
+                    var style = baseStyle.copy(fontSize = 96.sp)
+                    var textWidth = textMeasurer.measure(uniqueArtistCount.toString(), style).size.width
+                    while (textWidth > constraints.maxWidth) { style = style.copy(fontSize = style.fontSize * 0.95f); textWidth = textMeasurer.measure(uniqueArtistCount.toString(), style).size.width }
+                    style.copy(lineHeight = style.fontSize * 1.08f)
                 }
+                Text(
+                    text = animatedArtists.value.toInt().toString(),
+                    style = textStyle,
+                    maxLines = 1,
+                    modifier = Modifier.fillMaxWidth(),
+                    textAlign = TextAlign.Center
+                )
             }
             Spacer(modifier = Modifier.height(16.dp))
-            AnimatedVisibility(
-                visible = visible,
-                enter = fadeIn(tween(1000, 600)) + slideInVertically(animationSpec = tween(1000, 600)) { -80 }
-            ) {
-                Text(
-                    text = "Your music taste is quite diverse.",
-                    modifier = Modifier.padding(horizontal = 24.dp),
-                    style = MaterialTheme.typography.bodyLarge.copy(color = Color.White.copy(alpha = 0.8f), textAlign = TextAlign.Center)
-                )
-            }
+            Text(
+                text = "Your music taste is quite diverse.",
+                modifier = Modifier.padding(horizontal = 24.dp),
+                style = MaterialTheme.typography.bodyLarge.copy(color = Color.White.copy(alpha = 0.8f), textAlign = TextAlign.Center)
+            )
         }
     }
 }
@@ -1277,18 +1204,18 @@ fun WrappedTopArtistScreen(topArtist: Artist?, isVisible: Boolean) {
     ) {
         AnimatedVisibility(
             visible = visible,
-            enter = fadeIn(tween(1000, 200)) + slideInVertically(animationSpec = tween(1000, 200)) { -80 }
+            enter = fadeIn(tween(1000, 200)) + slideInVertically(tween(1000, 200))
         ) {
             Text(
                 text = "Your Top Artist",
-                style = MaterialTheme.typography.headlineSmall.copy(color = Color.White, fontFamily = bbh_bartle, fontSize = 32.sp),
+                style = MaterialTheme.typography.headlineSmall.copy(color = Color.White),
                 textAlign = TextAlign.Center
             )
         }
         Spacer(modifier = Modifier.height(32.dp))
         AnimatedVisibility(
             visible = visible,
-            enter = fadeIn(tween(1000, 400)) + slideInVertically(animationSpec = tween(1000, 400)) { -80 }
+            enter = fadeIn(tween(1000, 400)) + slideInVertically(tween(1000, 400))
         ) {
             AsyncImage(
                 model = ImageRequest.Builder(LocalContext.current).data(topArtist?.artist?.thumbnailUrl).build(),
@@ -1300,7 +1227,7 @@ fun WrappedTopArtistScreen(topArtist: Artist?, isVisible: Boolean) {
         Spacer(modifier = Modifier.height(16.dp))
         AnimatedVisibility(
             visible = visible,
-            enter = fadeIn(tween(1000, 600)) + slideInVertically(animationSpec = tween(1000, 600)) { -80 }
+            enter = fadeIn(tween(1000, 600)) + slideInVertically(tween(1000, 600))
         ) {
             Text(
                 text = topArtist?.artist?.name ?: "No Data",
@@ -1311,7 +1238,7 @@ fun WrappedTopArtistScreen(topArtist: Artist?, isVisible: Boolean) {
         }
         AnimatedVisibility(
             visible = visible,
-            enter = fadeIn(tween(1000, 800)) + slideInVertically(animationSpec = tween(1000, 800)) { -80 }
+            enter = fadeIn(tween(1000, 800)) + slideInVertically(tween(1000, 800))
         ) {
             Text(
                 text = "Listened for ${(topArtist?.timeListened ?: 0) / 60000} minutes",
@@ -1335,15 +1262,15 @@ fun WrappedTop5ArtistsScreen(topArtists: List<Artist>, isVisible: Boolean) {
         ) {
             AnimatedVisibility(
                 visible = visible,
-                enter = fadeIn(tween(1000, 200)) + slideInVertically(animationSpec = tween(1000, 200)) { -80 }
+                enter = fadeIn(tween(1000, 200)) + slideInVertically(tween(1000, 200))
             ) {
                 Text(
-                    text = "Your Top 5\nArtists",
-                    fontSize = 36.sp,
+                    text = "Top 5 Artists",
+                    fontSize = 40.sp,
                     fontFamily = bbh_bartle,
                     color = Color.White,
                     textAlign = TextAlign.Center,
-                    lineHeight = 40.sp
+                    lineHeight = 44.sp
                 )
             }
             Spacer(modifier = Modifier.height(32.dp))
@@ -1351,7 +1278,7 @@ fun WrappedTop5ArtistsScreen(topArtists: List<Artist>, isVisible: Boolean) {
                 topArtists.forEachIndexed { index, artist ->
                     AnimatedVisibility(
                         visible = visible,
-                        enter = fadeIn(tween(600, 400 + (index * 200))) + slideInVertically(animationSpec = tween(600, 400 + (index * 200))) { -50 }
+                        enter = fadeIn(tween(600, 400 + (index * 200))) + slideInVertically(tween(600, 400 + (index * 200)))
                     ) {
                         Row(
                             modifier = Modifier.padding(vertical = 8.dp),
@@ -1409,7 +1336,7 @@ fun PlaylistPage(state: WrappedState, onCreatePlaylist: () -> Unit) {
         ) {
             AutoResizingText(
                 text = "Your Insight Playlist\nis ready.",
-                style = TextStyle(fontFamily = bbh_bartle, fontSize = 36.sp, color = Color.White, textAlign = TextAlign.Center, lineHeight = 44.sp)
+                style = TextStyle(fontFamily = bbh_bartle, fontSize = 40.sp, color = Color.White, textAlign = TextAlign.Center, lineHeight = 48.sp)
             )
             Spacer(modifier = Modifier.height(32.dp))
             Image(
