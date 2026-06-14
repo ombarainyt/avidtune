@@ -18,11 +18,8 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import org.jsoup.Jsoup
 import java.net.URLEncoder
-import java.time.LocalDateTime
-import java.time.ZoneOffset
 import javax.inject.Inject
 
 @HiltViewModel
@@ -36,14 +33,6 @@ class ArtistViewModel @Inject constructor(
         .stateIn(viewModelScope, SharingStarted.Lazily, null)
     val librarySongs = database.artistSongsPreview(artistId)
         .stateIn(viewModelScope, SharingStarted.Lazily, emptyList())
-
-    private val thirtyDaysAgo = LocalDateTime.now().minusDays(30).toInstant(ZoneOffset.UTC).toEpochMilli()
-    
-    val monthlyPlayCount = database.artistPlayCountSince(artistId, thirtyDaysAgo)
-        .stateIn(viewModelScope, SharingStarted.Lazily, 0)
-        
-    val totalPlayCount = database.artistTotalPlayCount(artistId)
-        .stateIn(viewModelScope, SharingStarted.Lazily, 0)
 
     private val _globalMonthlyListeners = MutableStateFlow<String?>(null)
     val globalMonthlyListeners: StateFlow<String?> = _globalMonthlyListeners.asStateFlow()
