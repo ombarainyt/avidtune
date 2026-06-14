@@ -1350,4 +1350,12 @@ interface DatabaseDao {
     fun checkpoint() {
         raw("PRAGMA wal_checkpoint(FULL)".toSQLiteQuery())
     }
+
+    @Transaction
+    @Query("SELECT COUNT(*) FROM event JOIN song_artist_map ON event.songId = song_artist_map.songId WHERE artistId = :artistId AND timestamp > :fromTimestamp")
+    fun artistPlayCountSince(artistId: String, fromTimestamp: Long): Flow<Int>
+
+    @Transaction
+    @Query("SELECT COUNT(*) FROM event JOIN song_artist_map ON event.songId = song_artist_map.songId WHERE artistId = :artistId")
+    fun artistTotalPlayCount(artistId: String): Flow<Int>
 }
