@@ -841,6 +841,11 @@
     <string name="skipped_sponsor">Segment ignoré (SponsorBlock)</string>
     
     <string name="fallback_artist_desc">%1$s est un artiste musical.</string>
+    
+    <string name="current_version">Actuelle</string>
+    <string name="error_loading_changelog">Erreur lors du chargement du journal</string>
+    <string name="error_loading_commits">Erreur lors du chargement des commits</string>
+    <string name="cached">En cache</string>
 
 
 </resources>
