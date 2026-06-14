@@ -49,8 +49,10 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -300,6 +302,30 @@ fun SettingsScreen(
     var hasUpdate by remember { mutableStateOf(false) }
     var fetchedLatestVersion by remember { mutableStateOf(BuildConfig.VERSION_NAME) }
 
+    // Search History State
+    val prefs = context.getSharedPreferences("settings_search_history", Context.MODE_PRIVATE)
+    var searchHistory by remember {
+        mutableStateOf(prefs.getStringSet("history", emptySet())?.toList() ?: emptyList())
+    }
+
+    fun saveSearch(q: String) {
+        if (q.isBlank()) return
+        val newHistory = (listOf(q) + searchHistory).distinct().take(10)
+        searchHistory = newHistory
+        prefs.edit().putStringSet("history", newHistory.toSet()).apply()
+    }
+
+    fun clearHistory() {
+        searchHistory = emptyList()
+        prefs.edit().putStringSet("history", emptySet()).apply()
+    }
+
+    fun removeHistoryItem(q: String) {
+        val newHistory = searchHistory.filter { it != q }
+        searchHistory = newHistory
+        prefs.edit().putStringSet("history", newHistory.toSet()).apply()
+    }
+
     LaunchedEffect(Unit) {
         val newVersion = checkForUpdates()
         if (newVersion != null && isNewerVersion(newVersion, BuildConfig.VERSION_NAME)) {
@@ -371,9 +397,9 @@ fun SettingsScreen(
         !isStorageGranted
     }
 
-    val prefs = context.getSharedPreferences("settings", Context.MODE_PRIVATE)
+    val settingsPrefs = context.getSharedPreferences("settings", Context.MODE_PRIVATE)
     var hasRequestedPermissions by remember {
-        mutableStateOf(prefs.getBoolean("has_requested_permissions", false))
+        mutableStateOf(settingsPrefs.getBoolean("has_requested_permissions", false))
     }
 
     val resetSearch: () -> Unit = {
@@ -390,10 +416,12 @@ fun SettingsScreen(
     val queryText = query.text.trim()
     val showSearchBar = isSearching || queryText.isNotBlank()
 
-    val filteredQuickActions = filterQuickActions(quickActions, queryText)
-    val filteredIntegrations = filterIntegrations(integrationActions, queryText)
-    val filteredGroups = filterSettingsGroups(settingsGroups, queryText)
-    val filteredInternalItems = filterInternalItems(internalItems, queryText)
+    val searchResultsTitle = stringResource(R.string.search_results)
+
+    val filteredQuickActions = if (queryText.isBlank()) emptyList() else filterQuickActions(quickActions, queryText)
+    val filteredIntegrations = if (queryText.isBlank()) emptyList() else filterIntegrations(integrationActions, queryText)
+    val filteredGroups = if (queryText.isBlank()) emptyList() else filterSettingsGroups(settingsGroups, queryText, searchResultsTitle)
+    val filteredInternalItems = if (queryText.isBlank()) emptyList() else filterInternalItems(internalItems, queryText)
 
     val hasSearchResults by remember(
         filteredQuickActions,
@@ -411,7 +439,7 @@ fun SettingsScreen(
 
     val internalGroup = if (filteredInternalItems.isNotEmpty()) {
         SettingsGroup(
-            title = "Internal Settings",
+            title = stringResource(R.string.internal_settings),
             items = filteredInternalItems,
         )
     } else null
@@ -424,14 +452,16 @@ fun SettingsScreen(
             accountEmail = accountEmail,
             accountImageUrl = if (isLoggedIn) accountImageUrl else null,
         ),
-        quickActions = if (queryText.isBlank()) quickActions else filteredQuickActions,
-        integrations = if (queryText.isBlank()) integrationActions else filteredIntegrations,
-        groups = if (queryText.isBlank()) settingsGroups else filteredGroups,
-        internalGroup = if (queryText.isNotBlank()) internalGroup else null,
+        quickActions = quickActions,
+        integrations = integrationActions,
+        groups = settingsGroups,
+        internalGroup = null,
         showPermissionBanner = shouldShowPermissionHint,
         showUpdateBanner = hasUpdate,
         latestVersion = fetchedLatestVersion,
-        isSearchActive = queryText.isNotBlank(),
+        isSearchActive = false,
+        searchQuery = queryText,
+        searchHistory = searchHistory,
         hasSearchResults = hasSearchResults,
         onProfileHeaderClick = { navController.navigate("settings/account") },
         onRequestPermission = {
@@ -464,12 +494,27 @@ fun SettingsScreen(
                     context.startActivity(intent)
                 } else {
                     hasRequestedPermissions = true
-                    prefs.edit().putBoolean("has_requested_permissions", true).apply()
+                    settingsPrefs.edit().putBoolean("has_requested_permissions", true).apply()
                     permissionLauncher.launch(toRequest.toTypedArray())
                 }
             }
         },
         onUpdateClick = { showUpdateDialog = true },
+        onSearchHistoryItemClick = { clickedQuery ->
+            query = TextFieldValue(clickedQuery)
+            focusManager.clearFocus()
+            saveSearch(clickedQuery)
+        },
+        onRemoveSearchHistoryItem = { q -> removeHistoryItem(q) },
+        onClearSearchHistory = { clearHistory() },
+    )
+
+    val searchState = contentState.copy(
+        isSearchActive = true,
+        quickActions = filteredQuickActions,
+        integrations = filteredIntegrations,
+        groups = filteredGroups,
+        internalGroup = internalGroup,
     )
 
     Scaffold(
@@ -534,7 +579,10 @@ fun SettingsScreen(
                 TopSearch(
                     query = query,
                     onQueryChange = { query = it },
-                    onSearch = { focusManager.clearFocus() },
+                    onSearch = { 
+                        focusManager.clearFocus() 
+                        saveSearch(query.text.trim())
+                    },
                     active = showSearchBar,
                     onActiveChange = { active ->
                         if (active) {
@@ -576,9 +624,6 @@ fun SettingsScreen(
                     },
                     focusRequester = focusRequester,
                 ) {
-                    val searchState = contentState.copy(
-                        isSearchActive = true,
-                    )
                     AdaptiveSettingsLayout(
                         state = searchState,
                         modifier = Modifier.fillMaxWidth(),
@@ -602,23 +647,22 @@ fun filterQuickActions(
     actions: List<SettingsQuickAction>,
     query: String,
 ): List<SettingsQuickAction> {
-    if (query.isBlank()) return actions
+    if (query.isBlank()) return emptyList()
     return actions.filter { it.label.contains(query, ignoreCase = true) }
 }
 
 fun filterSettingsGroups(
     groups: List<SettingsGroup>,
     query: String,
+    searchResultsTitle: String
 ): List<SettingsGroup> {
-    if (query.isBlank()) return groups
-    return groups.mapNotNull { group ->
-        if (group.title.contains(query, ignoreCase = true)) {
-            group
-        } else {
-            val filtered = group.items.filter { matchesQuery(it, query) }
-            if (filtered.isEmpty()) null else group.copy(items = filtered)
-        }
-    }
+    if (query.isBlank()) return emptyList()
+    val allMatchedItems = groups.flatMap { it.items }.filter { matchesQuery(it, query) }
+        .sortedBy { it.title.indexOf(query, ignoreCase = true).let { idx -> if (idx < 0) 1000 else idx } }
+    
+    if (allMatchedItems.isEmpty()) return emptyList()
+    
+    return listOf(SettingsGroup(title = searchResultsTitle, items = allMatchedItems))
 }
 
 fun matchesQuery(
@@ -646,7 +690,7 @@ fun filterIntegrations(
     integrations: List<SettingsIntegrationAction>,
     query: String,
 ): List<SettingsIntegrationAction> {
-    if (query.isBlank()) return integrations
+    if (query.isBlank()) return emptyList()
     return integrations.filter { it.label.contains(query, ignoreCase = true) }
 }
 
@@ -688,13 +732,13 @@ private fun buildIntegrationActions(navController: NavController, resetSearch: (
     return listOf(
         SettingsIntegrationAction(
             icon = painterResource(R.drawable.discord),
-            label = "Discord",
+            label = stringResource(R.string.discord),
             onClick = { resetSearch(); navController.navigate("settings/discord") },
             accentColor = Color(0xFF5865F2)
         ),
         SettingsIntegrationAction(
             icon = painterResource(R.drawable.github),
-            label = "GitHub",
+            label = stringResource(R.string.github),
             onClick = { resetSearch(); uriHandler.openUri("https://github.com/cgens67/AvidTune") },
             accentColor = MaterialTheme.colorScheme.onSurface
         )
@@ -749,7 +793,7 @@ private fun buildSettingsGroups(
             title = stringResource(R.string.community),
             items = listOf(
                 SettingsItem(
-                    icon = painterResource(R.drawable.info), // using info as newspaper icon fallback
+                    icon = painterResource(R.drawable.newspaper),
                     title = stringResource(R.string.news),
                     badge = if (hasUnreadNews) "New" else null,
                     showUpdateIndicator = hasUnreadNews,
@@ -815,11 +859,72 @@ data class SettingsContentState(
     val showUpdateBanner: Boolean,
     val latestVersion: String,
     val isSearchActive: Boolean,
+    val searchQuery: String,
+    val searchHistory: List<String>,
     val hasSearchResults: Boolean,
     val onProfileHeaderClick: () -> Unit,
     val onRequestPermission: () -> Unit,
     val onUpdateClick: () -> Unit,
+    val onSearchHistoryItemClick: (String) -> Unit,
+    val onRemoveSearchHistoryItem: (String) -> Unit,
+    val onClearSearchHistory: () -> Unit,
 )
+
+@Composable
+private fun LazyListScope.SearchHistorySection(state: SettingsContentState, pad: Dp) {
+    if (state.searchHistory.isNotEmpty()) {
+        item(key = "search_history_header") {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = pad, vertical = 8.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = stringResource(R.string.search_history),
+                    style = MaterialTheme.typography.titleSmall,
+                    color = MaterialTheme.colorScheme.primary
+                )
+                TextButton(onClick = state.onClearSearchHistory) {
+                    Text(stringResource(R.string.clear_search_history))
+                }
+            }
+        }
+        items(state.searchHistory, key = { "history_$it" }) { historyItem ->
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { state.onSearchHistoryItemClick(historyItem) }
+                    .padding(horizontal = pad, vertical = 12.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(
+                    painter = painterResource(R.drawable.history),
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(modifier = Modifier.width(16.dp))
+                Text(
+                    text = historyItem,
+                    style = MaterialTheme.typography.bodyLarge,
+                    modifier = Modifier.weight(1f)
+                )
+                IconButton(
+                    onClick = { state.onRemoveSearchHistoryItem(historyItem) },
+                    modifier = Modifier.size(32.dp)
+                ) {
+                    Icon(
+                        painter = painterResource(R.drawable.close),
+                        contentDescription = stringResource(R.string.delete),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+            }
+        }
+    }
+}
 
 @Composable
 fun AdaptiveSettingsLayout(
@@ -937,26 +1042,26 @@ private fun CompactSettingsLayout(
             ),
         contentPadding = PaddingValues(top = topPadding, bottom = 32.dp),
     ) {
-        item(key = "hero") {
-            AnimatedVisibility(
-                visible = heroVisible,
-                enter = fadeIn(SettingsAnimations.entranceSpring()) +
-                    slideInVertically(
-                        initialOffsetY = { -it / 5 },
-                        animationSpec = SettingsAnimations.entranceSpring(),
-                    ),
-            ) {
-                SettingsProfileHeader(
-                    state = state.profileHeader,
-                    onClick = state.onProfileHeaderClick,
-                    modifier = Modifier
-                        .padding(horizontal = pad)
-                        .padding(top = 4.dp, bottom = spacing),
-                )
-            }
-        }
-
         if (!state.isSearchActive) {
+            item(key = "hero") {
+                AnimatedVisibility(
+                    visible = heroVisible,
+                    enter = fadeIn(SettingsAnimations.entranceSpring()) +
+                        slideInVertically(
+                            initialOffsetY = { -it / 5 },
+                            animationSpec = SettingsAnimations.entranceSpring(),
+                        ),
+                ) {
+                    SettingsProfileHeader(
+                        state = state.profileHeader,
+                        onClick = state.onProfileHeaderClick,
+                        modifier = Modifier
+                            .padding(horizontal = pad)
+                            .padding(top = 4.dp, bottom = spacing),
+                    )
+                }
+            }
+
             item(key = "permission") {
                 AnimatedVisibility(
                     visible = bannerVisible && state.showPermissionBanner,
@@ -991,48 +1096,9 @@ private fun CompactSettingsLayout(
             }
         }
 
-        if (state.quickActions.isNotEmpty()) {
-            item(key = "quickActions") {
-                AnimatedVisibility(
-                    visible = quickActionsVisible,
-                    enter = fadeIn(SettingsAnimations.entranceSpring()) +
-                        slideInVertically(
-                            initialOffsetY = { it / 6 },
-                            animationSpec = SettingsAnimations.entranceSpring(),
-                        ),
-                ) {
-                    SettingsQuickActionsSection(
-                        actions = state.quickActions,
-                        columns = quickActionColumns,
-                        modifier = Modifier
-                            .padding(horizontal = pad)
-                            .padding(bottom = spacing),
-                    )
-                }
-            }
-        }
-
-        if (state.integrations.isNotEmpty()) {
-            item(key = "integrations") {
-                AnimatedVisibility(
-                    visible = integrationsVisible,
-                    enter = fadeIn(SettingsAnimations.entranceSpring()) +
-                        slideInVertically(
-                            initialOffsetY = { it / 6 },
-                            animationSpec = SettingsAnimations.entranceSpring(),
-                        ),
-                ) {
-                    SettingsIntegrationsSection(
-                        integrations = state.integrations,
-                        modifier = Modifier
-                            .padding(horizontal = pad)
-                            .padding(bottom = spacing),
-                    )
-                }
-            }
-        }
-
-        if (state.isSearchActive && !state.hasSearchResults) {
+        if (state.isSearchActive && state.searchQuery.isBlank()) {
+            SearchHistorySection(state, pad)
+        } else if (state.isSearchActive && !state.hasSearchResults) {
             item(key = "empty") {
                 Spacer(modifier = Modifier.height(24.dp))
                 SettingsSearchEmpty(
@@ -1040,6 +1106,47 @@ private fun CompactSettingsLayout(
                 )
             }
         } else {
+            if (state.quickActions.isNotEmpty()) {
+                item(key = "quickActions") {
+                    AnimatedVisibility(
+                        visible = quickActionsVisible,
+                        enter = fadeIn(SettingsAnimations.entranceSpring()) +
+                            slideInVertically(
+                                initialOffsetY = { it / 6 },
+                                animationSpec = SettingsAnimations.entranceSpring(),
+                            ),
+                    ) {
+                        SettingsQuickActionsSection(
+                            actions = state.quickActions,
+                            columns = quickActionColumns,
+                            modifier = Modifier
+                                .padding(horizontal = pad)
+                                .padding(bottom = spacing),
+                        )
+                    }
+                }
+            }
+
+            if (state.integrations.isNotEmpty()) {
+                item(key = "integrations") {
+                    AnimatedVisibility(
+                        visible = integrationsVisible,
+                        enter = fadeIn(SettingsAnimations.entranceSpring()) +
+                            slideInVertically(
+                                initialOffsetY = { it / 6 },
+                                animationSpec = SettingsAnimations.entranceSpring(),
+                            ),
+                    ) {
+                        SettingsIntegrationsSection(
+                            integrations = state.integrations,
+                            modifier = Modifier
+                                .padding(horizontal = pad)
+                                .padding(bottom = spacing),
+                        )
+                    }
+                }
+            }
+
             if (state.internalGroup != null && state.internalGroup.items.isNotEmpty()) {
                 item(key = "internalSearchResults") {
                     SettingsGroupCard(
@@ -1109,20 +1216,20 @@ private fun MediumSettingsLayout(
                 .fillMaxHeight(),
             contentPadding = PaddingValues(top = topPadding, bottom = 32.dp),
         ) {
-            item(key = "hero") {
-                AnimatedVisibility(
-                    visible = heroVisible,
-                    enter = fadeIn(SettingsAnimations.entranceSpring()),
-                ) {
-                    SettingsProfileHeader(
-                        state = state.profileHeader,
-                        onClick = state.onProfileHeaderClick,
-                        modifier = Modifier.padding(top = 4.dp, bottom = spacing),
-                    )
-                }
-            }
-
             if (!state.isSearchActive) {
+                item(key = "hero") {
+                    AnimatedVisibility(
+                        visible = heroVisible,
+                        enter = fadeIn(SettingsAnimations.entranceSpring()),
+                    ) {
+                        SettingsProfileHeader(
+                            state = state.profileHeader,
+                            onClick = state.onProfileHeaderClick,
+                            modifier = Modifier.padding(top = 4.dp, bottom = spacing),
+                        )
+                    }
+                }
+
                 item(key = "permission") {
                     AnimatedVisibility(
                         visible = bannerVisible && state.showPermissionBanner,
@@ -1153,31 +1260,33 @@ private fun MediumSettingsLayout(
                 }
             }
 
-            if (state.quickActions.isNotEmpty()) {
-                item(key = "quickActions") {
-                    AnimatedVisibility(
-                        visible = quickActionsVisible,
-                        enter = fadeIn(SettingsAnimations.entranceSpring()),
-                    ) {
-                        SettingsQuickActionsSection(
-                            actions = state.quickActions,
-                            columns = 2,
-                            modifier = Modifier.padding(bottom = spacing),
-                        )
+            if (!state.isSearchActive || state.searchQuery.isNotBlank()) {
+                if (state.quickActions.isNotEmpty()) {
+                    item(key = "quickActions") {
+                        AnimatedVisibility(
+                            visible = quickActionsVisible,
+                            enter = fadeIn(SettingsAnimations.entranceSpring()),
+                        ) {
+                            SettingsQuickActionsSection(
+                                actions = state.quickActions,
+                                columns = 2,
+                                modifier = Modifier.padding(bottom = spacing),
+                            )
+                        }
                     }
                 }
-            }
 
-            if (state.integrations.isNotEmpty()) {
-                item(key = "integrations") {
-                    AnimatedVisibility(
-                        visible = integrationsVisible,
-                        enter = fadeIn(SettingsAnimations.entranceSpring()),
-                    ) {
-                        SettingsIntegrationsSection(
-                            integrations = state.integrations,
-                            modifier = Modifier.padding(bottom = spacing),
-                        )
+                if (state.integrations.isNotEmpty()) {
+                    item(key = "integrations") {
+                        AnimatedVisibility(
+                            visible = integrationsVisible,
+                            enter = fadeIn(SettingsAnimations.entranceSpring()),
+                        ) {
+                            SettingsIntegrationsSection(
+                                integrations = state.integrations,
+                                modifier = Modifier.padding(bottom = spacing),
+                            )
+                        }
                     }
                 }
             }
@@ -1189,7 +1298,9 @@ private fun MediumSettingsLayout(
                 .fillMaxHeight(),
             contentPadding = PaddingValues(top = topPadding, bottom = 32.dp),
         ) {
-            if (state.isSearchActive && !state.hasSearchResults) {
+            if (state.isSearchActive && state.searchQuery.isBlank()) {
+                SearchHistorySection(state, 0.dp)
+            } else if (state.isSearchActive && !state.hasSearchResults) {
                 item(key = "empty") {
                     Spacer(modifier = Modifier.height(24.dp))
                     SettingsSearchEmpty()
@@ -1260,20 +1371,20 @@ private fun ExpandedSettingsLayout(
                 .fillMaxHeight(),
             contentPadding = PaddingValues(top = topPadding, bottom = 32.dp),
         ) {
-            item(key = "hero") {
-                AnimatedVisibility(
-                    visible = heroVisible,
-                    enter = fadeIn(SettingsAnimations.entranceSpring()),
-                ) {
-                    SettingsProfileHeader(
-                        state = state.profileHeader,
-                        onClick = state.onProfileHeaderClick,
-                        modifier = Modifier.padding(top = 4.dp, bottom = spacing),
-                    )
-                }
-            }
-
             if (!state.isSearchActive) {
+                item(key = "hero") {
+                    AnimatedVisibility(
+                        visible = heroVisible,
+                        enter = fadeIn(SettingsAnimations.entranceSpring()),
+                    ) {
+                        SettingsProfileHeader(
+                            state = state.profileHeader,
+                            onClick = state.onProfileHeaderClick,
+                            modifier = Modifier.padding(top = 4.dp, bottom = spacing),
+                        )
+                    }
+                }
+
                 item(key = "permission") {
                     AnimatedVisibility(
                         visible = bannerVisible && state.showPermissionBanner,
@@ -1304,31 +1415,33 @@ private fun ExpandedSettingsLayout(
                 }
             }
 
-            if (state.quickActions.isNotEmpty()) {
-                item(key = "quickActions") {
-                    AnimatedVisibility(
-                        visible = quickActionsVisible,
-                        enter = fadeIn(SettingsAnimations.entranceSpring()),
-                    ) {
-                        SettingsQuickActionsSection(
-                            actions = state.quickActions,
-                            columns = 2,
-                            modifier = Modifier.padding(bottom = spacing),
-                        )
+            if (!state.isSearchActive || state.searchQuery.isNotBlank()) {
+                if (state.quickActions.isNotEmpty()) {
+                    item(key = "quickActions") {
+                        AnimatedVisibility(
+                            visible = quickActionsVisible,
+                            enter = fadeIn(SettingsAnimations.entranceSpring()),
+                        ) {
+                            SettingsQuickActionsSection(
+                                actions = state.quickActions,
+                                columns = 2,
+                                modifier = Modifier.padding(bottom = spacing),
+                            )
+                        }
                     }
                 }
-            }
 
-            if (state.integrations.isNotEmpty()) {
-                item(key = "integrations") {
-                    AnimatedVisibility(
-                        visible = integrationsVisible,
-                        enter = fadeIn(SettingsAnimations.entranceSpring()),
-                    ) {
-                        SettingsIntegrationsSection(
-                            integrations = state.integrations,
-                            modifier = Modifier.padding(bottom = spacing),
-                        )
+                if (state.integrations.isNotEmpty()) {
+                    item(key = "integrations") {
+                        AnimatedVisibility(
+                            visible = integrationsVisible,
+                            enter = fadeIn(SettingsAnimations.entranceSpring()),
+                        ) {
+                            SettingsIntegrationsSection(
+                                integrations = state.integrations,
+                                modifier = Modifier.padding(bottom = spacing),
+                            )
+                        }
                     }
                 }
             }
@@ -1340,7 +1453,9 @@ private fun ExpandedSettingsLayout(
                 .fillMaxHeight(),
             contentPadding = PaddingValues(top = topPadding, bottom = 32.dp),
         ) {
-            if (state.isSearchActive && !state.hasSearchResults) {
+            if (state.isSearchActive && state.searchQuery.isBlank()) {
+                SearchHistorySection(state, 0.dp)
+            } else if (state.isSearchActive && !state.hasSearchResults) {
                 item(key = "empty") {
                     Spacer(modifier = Modifier.height(24.dp))
                     SettingsSearchEmpty()
