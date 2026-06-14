@@ -16,24 +16,34 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Slider
+import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarScrollBehavior
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -48,6 +58,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -64,6 +75,7 @@ import androidx.core.net.toUri
 import androidx.media3.common.Player.STATE_READY
 import androidx.navigation.NavController
 import coil.compose.AsyncImage
+import com.cgens67.avidtune.LocalPlayerAwareWindowInsets
 import com.cgens67.avidtune.LocalPlayerConnection
 import com.cgens67.avidtune.R
 import com.cgens67.avidtune.constants.DiscordInfoDismissedKey
@@ -75,6 +87,7 @@ import com.cgens67.avidtune.constants.EnableDiscordRPCKey
 import com.cgens67.avidtune.constants.SliderStyle
 import com.cgens67.avidtune.constants.SliderStyleKey
 import com.cgens67.avidtune.db.entities.Song
+import com.cgens67.avidtune.ui.component.IconButton
 import com.cgens67.avidtune.ui.component.InfoLabel
 import com.cgens67.avidtune.ui.component.PreferenceEntry
 import com.cgens67.avidtune.ui.component.PreferenceGroupTitle
@@ -82,6 +95,7 @@ import com.cgens67.avidtune.ui.component.SettingsGeneralCategory
 import com.cgens67.avidtune.ui.component.SettingsPage
 import com.cgens67.avidtune.ui.component.SwitchPreference
 import com.cgens67.avidtune.ui.component.TextFieldDialog
+import com.cgens67.avidtune.ui.utils.backToMain
 import com.cgens67.avidtune.utils.makeTimeString
 import com.cgens67.avidtune.utils.rememberEnumPreference
 import com.cgens67.avidtune.utils.rememberPreference
@@ -624,7 +638,7 @@ fun EnhancedRichPresence(
                             context.startActivity(intent)
                         },
                         modifier = Modifier.weight(1f),
-                        colors = androidx.compose.material3.ButtonDefaults.filledTonalButtonColors(
+                        colors = ButtonDefaults.filledTonalButtonColors(
                             containerColor = MaterialTheme.colorScheme.primaryContainer
                         )
                     ) {
@@ -693,12 +707,12 @@ fun EnhancedProgressBar(
     Column(modifier = Modifier.fillMaxWidth()) {
         when (sliderStyle) {
             SliderStyle.DEFAULT -> {
-                androidx.compose.material3.Slider(
+                Slider(
                     value = position.toFloat(),
                     valueRange = 0f..duration.toFloat().coerceAtLeast(1f),
                     onValueChange = {},
                     enabled = false,
-                    colors = androidx.compose.material3.SliderDefaults.colors(
+                    colors = SliderDefaults.colors(
                         activeTrackColor = MaterialTheme.colorScheme.primary,
                         inactiveTrackColor = MaterialTheme.colorScheme.surfaceVariant,
                         disabledActiveTrackColor = MaterialTheme.colorScheme.primary,
@@ -714,7 +728,7 @@ fun EnhancedProgressBar(
                     valueRange = 0f..duration.toFloat().coerceAtLeast(1f),
                     onValueChange = {},
                     enabled = false,
-                    colors = androidx.compose.material3.SliderDefaults.colors(
+                    colors = SliderDefaults.colors(
                         activeTrackColor = MaterialTheme.colorScheme.primary,
                         inactiveTrackColor = MaterialTheme.colorScheme.surfaceVariant,
                         disabledActiveTrackColor = MaterialTheme.colorScheme.primary,
