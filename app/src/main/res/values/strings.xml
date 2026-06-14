@@ -904,5 +904,10 @@
     <string name="skipped_sponsor">Skipped segment (SponsorBlock)</string>
     
     <string name="fallback_artist_desc">%1$s is a music artist.</string>
+    
+    <string name="current_version">Current</string>
+    <string name="error_loading_changelog">Error loading changelog</string>
+    <string name="error_loading_commits">Error loading commits</string>
+    <string name="cached">Cached</string>
 
 </resources>
