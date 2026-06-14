@@ -329,27 +329,36 @@ object YouTube {
     suspend fun artist(browseId: String): Result<ArtistPage> =
         runCatching {
             val response = innerTube.browse(WEB_REMIX, browseId).body<BrowseResponse>()
+            val immersiveHeader = response.header?.musicImmersiveHeaderRenderer
+            val subscribeButtonRenderer = immersiveHeader?.subscriptionButton?.subscribeButtonRenderer
+
             ArtistPage(
                 artist = ArtistItem(
                     id = browseId,
-                    title = response.header?.musicImmersiveHeaderRenderer?.title?.runs?.firstOrNull()?.text
+                    title = immersiveHeader?.title?.runs?.firstOrNull()?.text
                         ?: response.header?.musicVisualHeaderRenderer?.title?.runs?.firstOrNull()?.text
-                        ?: response.header?.musicHeaderRenderer?.title?.runs?.firstOrNull()?.text ?: "Unknown Title",
-                    thumbnail = response.header?.musicImmersiveHeaderRenderer?.thumbnail?.musicThumbnailRenderer?.getThumbnailUrl()
+                        ?: response.header?.musicHeaderRenderer?.title?.runs?.firstOrNull()?.text!!,
+                    thumbnail = immersiveHeader?.thumbnail?.musicThumbnailRenderer?.getThumbnailUrl()
                         ?: response.header?.musicVisualHeaderRenderer?.foregroundThumbnail?.musicThumbnailRenderer?.getThumbnailUrl()
                         ?: response.header?.musicDetailHeaderRenderer?.thumbnail?.musicThumbnailRenderer?.getThumbnailUrl() ?: "",
-                    channelId = response.header?.musicImmersiveHeaderRenderer?.subscriptionButton?.subscribeButtonRenderer?.channelId,
-                    shuffleEndpoint = response.header?.musicImmersiveHeaderRenderer?.playButton?.buttonRenderer?.navigationEndpoint?.watchEndpoint
+                    channelId = subscribeButtonRenderer?.channelId,
+                    playEndpoint = response.contents?.singleColumnBrowseResultsRenderer?.tabs?.firstOrNull()
+                        ?.tabRenderer?.content?.sectionListRenderer?.contents?.firstOrNull()?.musicShelfRenderer
+                        ?.contents?.firstOrNull()?.musicResponsiveListItemRenderer?.overlay?.musicItemThumbnailOverlayRenderer
+                        ?.content?.musicPlayButtonRenderer?.playNavigationEndpoint?.watchEndpoint,
+                    shuffleEndpoint = immersiveHeader?.playButton?.buttonRenderer?.navigationEndpoint?.watchEndpoint
                         ?: response.contents?.singleColumnBrowseResultsRenderer?.tabs?.firstOrNull()?.tabRenderer?.content?.sectionListRenderer
                             ?.contents?.firstOrNull()?.musicShelfRenderer?.contents?.firstOrNull()?.musicResponsiveListItemRenderer?.navigationEndpoint?.watchPlaylistEndpoint,
-                    radioEndpoint = response.header?.musicImmersiveHeaderRenderer?.startRadioButton?.buttonRenderer?.navigationEndpoint?.watchEndpoint,
-                    subscriberCountText = response.header?.musicImmersiveHeaderRenderer?.subscriptionButton?.subscribeButtonRenderer?.subscriberCountText?.runs?.firstOrNull()?.text
+                    radioEndpoint = immersiveHeader?.startRadioButton?.buttonRenderer?.navigationEndpoint?.watchEndpoint,
+                    subscriberCountText = subscribeButtonRenderer?.subscriberCountText?.runs?.firstOrNull()?.text
+                        ?: subscribeButtonRenderer?.subscriberCountWithSubscribeText?.runs?.firstOrNull()?.text,
+                    monthlyListenerCountText = immersiveHeader?.monthlyListenerCount?.runs?.firstOrNull()?.text,
                 ),
 
                 sections = response.contents?.singleColumnBrowseResultsRenderer?.tabs?.firstOrNull()
                     ?.tabRenderer?.content?.sectionListRenderer?.contents
                     ?.mapNotNull(ArtistPage::fromSectionListRendererContent)!!,
-                description = response.header?.musicImmersiveHeaderRenderer?.description?.runs?.firstOrNull()?.text
+                description = immersiveHeader?.description?.runs?.firstOrNull()?.text
             )
         }
 
