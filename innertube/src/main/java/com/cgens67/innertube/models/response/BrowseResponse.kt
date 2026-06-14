@@ -101,6 +101,7 @@ data class BrowseResponse(
             val playButton: Button?,
             val startRadioButton: Button?,
             val subscriptionButton: SubscriptionButton?,
+            val monthlyListenerCount: Runs? = null,
             val menu: Menu,
         )
 
