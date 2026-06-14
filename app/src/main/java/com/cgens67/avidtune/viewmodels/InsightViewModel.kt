@@ -74,7 +74,7 @@ class InsightViewModel @Inject constructor(
 
                     val newPlaylist = PlaylistEntity(
                         id = playlistId,
-                        name = WrappedConstants.PLAYLIST_NAME,
+                        name = context.getString(R.string.insight_playlist_name, WrappedConstants.YEAR),
                         bookmarkedAt = LocalDateTime.now(),
                         isEditable = true
                     )
