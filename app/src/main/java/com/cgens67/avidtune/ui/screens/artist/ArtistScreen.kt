@@ -8,6 +8,7 @@ import android.content.Intent
 import android.widget.Toast
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.expandHorizontally
 import androidx.compose.animation.fadeIn
@@ -49,6 +50,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -63,6 +65,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
@@ -124,6 +127,8 @@ import com.cgens67.avidtune.constants.CONTENT_TYPE_PLAYLIST
 import com.cgens67.avidtune.constants.CONTENT_TYPE_SONG
 import com.cgens67.avidtune.constants.HideExplicitKey
 import com.cgens67.avidtune.db.entities.ArtistEntity
+import com.cgens67.avidtune.db.entities.Song
+import com.cgens67.avidtune.extensions.toMediaItem
 import com.cgens67.avidtune.extensions.togglePlayPause
 import com.cgens67.avidtune.models.toMediaMetadata
 import com.cgens67.avidtune.playback.queues.ListQueue
@@ -497,7 +502,7 @@ fun ArtistScreen(
 
                         // Artist Name
                         Text(
-                            text = artistName ?: stringResource(R.string.unknown_artist),
+                            text = artistName ?: stringResource(R.string.unknown),
                             style = MaterialTheme.typography.headlineMedium,
                             fontWeight = FontWeight.Bold,
                             textAlign = TextAlign.Center,
@@ -833,7 +838,7 @@ fun ArtistScreen(
                                         .padding(horizontal = 16.dp, vertical = 8.dp)
                                 ) {
                                     Text(
-                                        text = stringResource(R.string.view_all),
+                                        text = "View All",
                                         style = MaterialTheme.typography.labelLarge,
                                         color = MaterialTheme.colorScheme.primary,
                                         modifier = Modifier
@@ -1023,7 +1028,7 @@ fun ArtistScreen(
 
         // FAB for switching between local/remote view
         HideOnScrollFAB(
-            visible = librarySongs.isNotEmpty() && libraryArtist?.artist?.isLocal != true,
+            visible = librarySongs.isNotEmpty() && libraryArtist?.artist?.isLocalArtist != true,
             lazyListState = lazyListState,
             icon = if (showLocal) R.drawable.language else R.drawable.library_music,
             onClick = {
