@@ -844,7 +844,6 @@
     <string name="insight_full_stats">Full\nstats</string>
     <string name="insight_download_report">Download\nreport</string>
     <string name="insight_view_full">View full AvidTune Insight</string>
-    <string name="insight_no_data">No data available for the year yet.</string>
     <string name="insight_minutes">Minutes</string>
     <string name="insight_playlist_name">AvidTune Insight %1$d</string>
     <string name="insight_msg_tease_0">I really hope you are not disappointed...</string>
