@@ -909,5 +909,10 @@
     <string name="error_loading_changelog">Error loading changelog</string>
     <string name="error_loading_commits">Error loading commits</string>
     <string name="cached">Cached</string>
+    
+    <!-- Settings Search & Layout -->
+    <string name="internal_settings">Internal Settings</string>
+    <string name="github">GitHub</string>
+    <string name="new_badge">New</string>
 
 </resources>
