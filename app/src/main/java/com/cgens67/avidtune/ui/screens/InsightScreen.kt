@@ -70,6 +70,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.PointMode
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
@@ -123,6 +124,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import timber.log.Timber
@@ -385,28 +387,28 @@ fun InsightScreen(navController: NavController) {
         }
     }
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { },
-                navigationIcon = {
-                    IconButton(onClick = onClose) {
-                        Icon(painterResource(R.drawable.arrow_back), contentDescription = "Back", tint = Color.White)
-                    }
-                },
-                actions = {
-                    IconButton(onClick = { audioService.toggleMute() }) {
-                        val icon = if (isMuted) R.drawable.volume_off else R.drawable.volume_up
-                        Icon(painterResource(icon), contentDescription = "Mute", tint = Color.White)
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent)
-            )
-        },
-        containerColor = Color.Transparent
-    ) { paddingValues ->
-        Box(modifier = Modifier.padding(paddingValues)) {
-            WrappedBackground {
+    WrappedBackground(modifier = Modifier.fillMaxSize()) {
+        Scaffold(
+            topBar = {
+                TopAppBar(
+                    title = { },
+                    navigationIcon = {
+                        IconButton(onClick = onClose) {
+                            Icon(painterResource(R.drawable.arrow_back), contentDescription = "Back", tint = Color.White)
+                        }
+                    },
+                    actions = {
+                        IconButton(onClick = { audioService.toggleMute() }) {
+                            val icon = if (isMuted) R.drawable.volume_off else R.drawable.volume_up
+                            Icon(painterResource(icon), contentDescription = "Mute", tint = Color.White)
+                        }
+                    },
+                    colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent)
+                )
+            },
+            containerColor = Color.Transparent
+        ) { paddingValues ->
+            Box(modifier = Modifier.padding(paddingValues)) {
                 VerticalPager(
                     state = pagerState,
                     modifier = Modifier.fillMaxSize()
@@ -656,7 +658,7 @@ fun WrappedIntro(onNext: () -> Unit) {
     var visible by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) { delay(200); visible = true }
 
-    WrappedBackground(modifier = Modifier.fillMaxSize()) {
+    Box(modifier = Modifier.fillMaxSize()) {
         Column(
             modifier = Modifier.fillMaxSize(),
             horizontalAlignment = Alignment.CenterHorizontally,
@@ -669,6 +671,7 @@ fun WrappedIntro(onNext: () -> Unit) {
                 Image(
                     painter = painterResource(R.drawable.avidtune),
                     contentDescription = null,
+                    colorFilter = ColorFilter.tint(Color.White),
                     modifier = Modifier.size(100.dp).clip(CircleShape)
                 )
             }
@@ -1375,6 +1378,7 @@ fun ConclusionPage(onClose: () -> Unit) {
             Image(
                 painter = painterResource(R.drawable.avidtune),
                 contentDescription = null,
+                colorFilter = ColorFilter.tint(Color.White),
                 modifier = Modifier.size(96.dp).clip(CircleShape)
             )
             Spacer(modifier = Modifier.height(24.dp))
