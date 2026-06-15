@@ -539,8 +539,15 @@ fun ArtistScreen(
 
                             // Description
                             var isDescriptionExpanded by rememberSaveable { mutableStateOf(false) }
-                            val fallbackDesc = "Explore the music of $artistName."
-                            val description = artistPage?.description?.substringBefore("From Wikipedia")?.trim() ?: fallbackDesc
+                            val fallbackDesc = stringResource(R.string.fallback_artist_desc, artistName)
+                            val description = artistPage?.description?.trimEnd()?.let { desc ->
+                                val lines = desc.lines()
+                                if (lines.isNotEmpty() && lines.last().contains(Regex("(?i)Wikipedia|Wikipédia|维基百科|維基百科|위키백과"))) {
+                                    lines.dropLast(1).joinToString("\n").trim()
+                                } else {
+                                    desc
+                                }
+                            } ?: fallbackDesc
 
                             Text(
                                 text = description,
@@ -641,6 +648,7 @@ fun ArtistScreen(
                                         ),
                                         style = MaterialTheme.typography.labelMedium,
                                         maxLines = 1,
+                                        softWrap = false,
                                         overflow = TextOverflow.Ellipsis
                                     )
                                 }
@@ -670,6 +678,7 @@ fun ArtistScreen(
                                             text = stringResource(R.string.radio),
                                             style = MaterialTheme.typography.labelMedium,
                                             maxLines = 1,
+                                            softWrap = false,
                                             overflow = TextOverflow.Ellipsis
                                         )
                                     }
@@ -704,6 +713,7 @@ fun ArtistScreen(
                                             text = stringResource(R.string.shuffle),
                                             style = MaterialTheme.typography.labelMedium,
                                             maxLines = 1,
+                                            softWrap = false,
                                             overflow = TextOverflow.Ellipsis
                                         )
                                     }
