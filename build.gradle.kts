@@ -6,11 +6,11 @@ plugins {
     alias(libs.plugins.compose.compiler) apply false
 }
 
-    buildscript {
+buildscript {
     repositories {
         google()
         mavenCentral()
-        maven { setUrl("https://jitpack.io") }
+        maven { setUrl("https://www.jitpack.io") }
     }
     dependencies {
         classpath(libs.gradle)
