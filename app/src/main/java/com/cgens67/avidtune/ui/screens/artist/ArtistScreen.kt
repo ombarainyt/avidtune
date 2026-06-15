@@ -540,14 +540,7 @@ fun ArtistScreen(
                             // Description
                             var isDescriptionExpanded by rememberSaveable { mutableStateOf(false) }
                             val fallbackDesc = stringResource(R.string.fallback_artist_desc, artistName)
-                            val description = artistPage?.description?.trimEnd()?.let { desc ->
-                                val lines = desc.lines()
-                                if (lines.isNotEmpty() && lines.last().contains(Regex("(?i)Wikipedia|Wikipédia|维基百科|維基百科|위키백과"))) {
-                                    lines.dropLast(1).joinToString("\n").trim()
-                                } else {
-                                    desc
-                                }
-                            } ?: fallbackDesc
+                            val description = artistPage?.description?.substringBefore("From Wikipedia")?.trim() ?: fallbackDesc
 
                             Text(
                                 text = description,
@@ -632,13 +625,13 @@ fun ArtistScreen(
                                                 R.drawable.subscribe
                                         ),
                                         contentDescription = null,
-                                        modifier = Modifier.size(18.dp),
+                                        modifier = Modifier.size(20.dp),
                                         tint = if (libraryArtist?.artist?.bookmarkedAt != null)
                                             MaterialTheme.colorScheme.onPrimary
                                         else
                                             LocalContentColor.current
                                     )
-                                    Spacer(Modifier.width(4.dp))
+                                    Spacer(Modifier.size(ToggleButtonDefaults.IconSpacing))
                                     Text(
                                         text = stringResource(
                                             if (libraryArtist?.artist?.bookmarkedAt != null)
@@ -646,10 +639,7 @@ fun ArtistScreen(
                                             else
                                                 R.string.subscribe
                                         ),
-                                        style = MaterialTheme.typography.labelMedium,
-                                        maxLines = 1,
-                                        softWrap = false,
-                                        overflow = TextOverflow.Ellipsis
+                                        style = MaterialTheme.typography.labelMedium
                                     )
                                 }
 
@@ -670,16 +660,13 @@ fun ArtistScreen(
                                         Icon(
                                             painter = painterResource(R.drawable.radio),
                                             contentDescription = null,
-                                            modifier = Modifier.size(18.dp),
+                                            modifier = Modifier.size(20.dp),
                                             tint = MaterialTheme.colorScheme.onSurfaceVariant
                                         )
-                                        Spacer(Modifier.width(4.dp))
+                                        Spacer(Modifier.size(ToggleButtonDefaults.IconSpacing))
                                         Text(
                                             text = stringResource(R.string.radio),
-                                            style = MaterialTheme.typography.labelMedium,
-                                            maxLines = 1,
-                                            softWrap = false,
-                                            overflow = TextOverflow.Ellipsis
+                                            style = MaterialTheme.typography.labelMedium
                                         )
                                     }
                                 }
@@ -705,16 +692,13 @@ fun ArtistScreen(
                                         Icon(
                                             painter = painterResource(R.drawable.shuffle),
                                             contentDescription = stringResource(R.string.shuffle),
-                                            modifier = Modifier.size(18.dp),
+                                            modifier = Modifier.size(20.dp),
                                             tint = MaterialTheme.colorScheme.onSurfaceVariant
                                         )
-                                        Spacer(Modifier.width(4.dp))
+                                        Spacer(Modifier.size(ToggleButtonDefaults.IconSpacing))
                                         Text(
                                             text = stringResource(R.string.shuffle),
-                                            style = MaterialTheme.typography.labelMedium,
-                                            maxLines = 1,
-                                            softWrap = false,
-                                            overflow = TextOverflow.Ellipsis
+                                            style = MaterialTheme.typography.labelMedium
                                         )
                                     }
                                 }
