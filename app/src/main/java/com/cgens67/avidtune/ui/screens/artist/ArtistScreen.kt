@@ -134,6 +134,7 @@ import coil.imageLoader
 import coil.request.ImageRequest
 import com.cgens67.avidtune.playback.queues.ListQueue
 import com.cgens67.avidtune.ui.theme.PlayerColorExtractor
+import com.cgens67.innertube.YouTube
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -347,7 +348,7 @@ fun ArtistScreen(
                 .only(WindowInsetsSides.Horizontal + WindowInsetsSides.Bottom)
                 .asPaddingValues(),
         ) {
-            if (artistPage == null) {
+            if (artistPage == null && librarySongs.isEmpty()) {
                 item(key = "shimmer") {
                     ShimmerHost {
                         // Header Image
@@ -447,7 +448,7 @@ fun ArtistScreen(
                                 modifier = Modifier.padding(bottom = 16.dp)
                             )
 
-                            // Subscriber count and Streams badges
+                            // Subscriber count badges
                             Row(
                                 verticalAlignment = Alignment.CenterVertically,
                                 modifier = Modifier
@@ -475,54 +476,6 @@ fun ArtistScreen(
                                             text = subscribers.split(" ").firstOrNull() ?: subscribers,
                                             style = MaterialTheme.typography.labelLarge,
                                             color = MaterialTheme.colorScheme.onSecondaryContainer,
-                                            fontWeight = FontWeight.Medium
-                                        )
-                                    }
-                                }
-
-                                artistPage?.artist?.monthlyListenerCountText?.let { monthlyListeners ->
-                                    Row(
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        modifier = Modifier
-                                            .clip(RoundedCornerShape(12.dp))
-                                            .background(MaterialTheme.colorScheme.tertiaryContainer)
-                                            .padding(horizontal = 12.dp, vertical = 6.dp)
-                                    ) {
-                                        Icon(
-                                            painter = painterResource(R.drawable.play),
-                                            contentDescription = null,
-                                            modifier = Modifier.size(16.dp),
-                                            tint = MaterialTheme.colorScheme.onTertiaryContainer
-                                        )
-                                        Spacer(modifier = Modifier.width(6.dp))
-                                        Text(
-                                            text = monthlyListeners.split(" ").firstOrNull() ?: monthlyListeners,
-                                            style = MaterialTheme.typography.labelLarge,
-                                            color = MaterialTheme.colorScheme.onTertiaryContainer,
-                                            fontWeight = FontWeight.Medium
-                                        )
-                                    }
-                                }
-
-                                if (totalPlayCount > 0) {
-                                    Row(
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        modifier = Modifier
-                                            .clip(RoundedCornerShape(12.dp))
-                                            .background(MaterialTheme.colorScheme.surfaceVariant)
-                                            .padding(horizontal = 12.dp, vertical = 6.dp)
-                                    ) {
-                                        Icon(
-                                            painter = painterResource(R.drawable.history),
-                                            contentDescription = null,
-                                            modifier = Modifier.size(16.dp),
-                                            tint = MaterialTheme.colorScheme.onSurfaceVariant
-                                        )
-                                        Spacer(modifier = Modifier.width(6.dp))
-                                        Text(
-                                            text = totalPlayCount.toString(),
-                                            style = MaterialTheme.typography.labelLarge,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                                             fontWeight = FontWeight.Medium
                                         )
                                     }
@@ -563,10 +516,13 @@ fun ArtistScreen(
                                 ToggleButton(
                                     checked = libraryArtist?.artist?.bookmarkedAt != null,
                                     onCheckedChange = {
+                                        val isBookmarked = libraryArtist?.artist?.bookmarkedAt != null
+                                        
+                                        // Save locally
                                         database.transaction {
                                             val artist = libraryArtist?.artist
                                             if (artist != null) {
-                                                update(artist.toggleLike())
+                                                update(artist.localToggleLike())
                                             } else {
                                                 artistPage?.artist?.let {
                                                     insert(
@@ -575,9 +531,24 @@ fun ArtistScreen(
                                                             name = it.title,
                                                             channelId = it.channelId,
                                                             thumbnailUrl = it.thumbnail,
-                                                        ).toggleLike()
+                                                        ).localToggleLike()
                                                     )
                                                 }
+                                            }
+                                        }
+
+                                        // Network sync
+                                        coroutineScope.launch(Dispatchers.IO) {
+                                            try {
+                                                val targetChannelId = artistPage?.artist?.channelId 
+                                                    ?: if (viewModel.artistId.startsWith("UC")) viewModel.artistId 
+                                                    else YouTube.artist(viewModel.artistId).getOrNull()?.artist?.channelId
+                                                
+                                                if (targetChannelId != null) {
+                                                    YouTube.subscribeChannel(targetChannelId, !isBookmarked)
+                                                }
+                                            } catch (e: Exception) {
+                                                Log.e("ArtistScreen", "Failed to subscribe/unsubscribe", e)
                                             }
                                         }
                                     },
@@ -987,7 +958,7 @@ fun ArtistScreen(
             },
             colors = TopAppBarDefaults.topAppBarColors(
                 containerColor = Color.Transparent,
-                scrolledContainerColor = MaterialTheme.colorScheme.surface
+                scrolledContainerColor = Color.Transparent
             ),
             scrollBehavior = scrollBehavior
         )
