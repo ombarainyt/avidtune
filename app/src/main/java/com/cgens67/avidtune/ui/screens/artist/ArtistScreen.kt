@@ -117,7 +117,6 @@ import com.cgens67.avidtune.ui.utils.backToMain
 import com.cgens67.avidtune.ui.utils.fadingEdge
 import com.cgens67.avidtune.ui.utils.resize
 import com.cgens67.avidtune.viewmodels.ArtistViewModel
-import com.valentinilk.shimmer.shimmer
 import androidx.compose.foundation.layout.offset
 import androidx.compose.material3.ButtonGroupDefaults
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
@@ -351,38 +350,55 @@ fun ArtistScreen(
             if (artistPage == null && librarySongs.isEmpty()) {
                 item(key = "shimmer") {
                     ShimmerHost {
-                        Box(
+                        // Header Image
+                        Spacer(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .aspectRatio(4f / 3),
+                                .aspectRatio(1f)
+                                .background(MaterialTheme.colorScheme.onSurface)
+                        )
+
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(16.dp)
                         ) {
-                            Spacer(
-                                modifier = Modifier
-                                    .shimmer()
-                                    .background(MaterialTheme.colorScheme.onSurface)
-                                    .fadingEdge(
-                                        top = WindowInsets.systemBars
-                                            .asPaddingValues()
-                                            .calculateTopPadding() + AppBarHeight,
-                                        bottom = 108.dp,
-                                    ),
-                            )
+                            // Title
                             TextPlaceholder(
-                                height = 56.dp,
+                                height = 32.dp,
                                 modifier = Modifier
-                                    .align(Alignment.BottomCenter)
-                                    .padding(horizontal = 48.dp),
+                                    .fillMaxWidth(0.6f)
+                                    .padding(bottom = 16.dp)
                             )
+
+                            // Badges (Subscribers, etc.)
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                modifier = Modifier.padding(bottom = 16.dp)
+                            ) {
+                                Spacer(modifier = Modifier.height(28.dp).width(80.dp).clip(RoundedCornerShape(12.dp)).background(MaterialTheme.colorScheme.onSurface))
+                                Spacer(modifier = Modifier.height(28.dp).width(100.dp).clip(RoundedCornerShape(12.dp)).background(MaterialTheme.colorScheme.onSurface))
+                            }
+
+                            // Description
+                            TextPlaceholder(modifier = Modifier.fillMaxWidth())
+                            TextPlaceholder(modifier = Modifier.fillMaxWidth(0.8f))
+                            Spacer(modifier = Modifier.height(16.dp))
+
+                            // Buttons
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(top = 8.dp, bottom = 16.dp),
+                                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                            ) {
+                                Spacer(modifier = Modifier.height(48.dp).weight(1f).clip(RoundedCornerShape(24.dp)).background(MaterialTheme.colorScheme.onSurface))
+                                Spacer(modifier = Modifier.height(48.dp).weight(1f).clip(RoundedCornerShape(24.dp)).background(MaterialTheme.colorScheme.onSurface))
+                                Spacer(modifier = Modifier.height(48.dp).weight(1f).clip(RoundedCornerShape(24.dp)).background(MaterialTheme.colorScheme.onSurface))
+                            }
                         }
 
-                        Row(
-                            modifier = Modifier.padding(12.dp),
-                        ) {
-                            ButtonPlaceholder(Modifier.weight(1f))
-                            Spacer(Modifier.width(12.dp))
-                            ButtonPlaceholder(Modifier.weight(1f))
-                        }
-
+                        // List items
                         repeat(6) {
                             ListItemPlaceHolder()
                         }
@@ -407,9 +423,6 @@ fun ArtistScreen(
                                     modifier = Modifier
                                         .fillMaxSize()
                                         .fadingEdge(
-                                            top = WindowInsets.systemBars
-                                                .asPaddingValues()
-                                                .calculateTopPadding() + AppBarHeight,
                                             bottom = 80.dp,
                                         ),
                                 )
@@ -459,7 +472,7 @@ fun ArtistScreen(
                                         )
                                         Spacer(modifier = Modifier.width(6.dp))
                                         Text(
-                                            text = subscribers,
+                                            text = subscribers.split(" ").firstOrNull() ?: subscribers,
                                             style = MaterialTheme.typography.labelLarge,
                                             color = MaterialTheme.colorScheme.onSecondaryContainer,
                                             fontWeight = FontWeight.Medium
@@ -483,7 +496,7 @@ fun ArtistScreen(
                                         )
                                         Spacer(modifier = Modifier.width(6.dp))
                                         Text(
-                                            text = monthlyListeners,
+                                            text = monthlyListeners.split(" ").firstOrNull() ?: monthlyListeners,
                                             style = MaterialTheme.typography.labelLarge,
                                             color = MaterialTheme.colorScheme.onTertiaryContainer,
                                             fontWeight = FontWeight.Medium
@@ -507,7 +520,7 @@ fun ArtistScreen(
                                         )
                                         Spacer(modifier = Modifier.width(6.dp))
                                         Text(
-                                            text = "$totalPlayCount total streams",
+                                            text = totalPlayCount.toString(),
                                             style = MaterialTheme.typography.labelLarge,
                                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                                             fontWeight = FontWeight.Medium
