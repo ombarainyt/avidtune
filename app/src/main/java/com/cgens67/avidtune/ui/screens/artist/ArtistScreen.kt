@@ -240,12 +240,6 @@ fun ArtistScreen(
         -(systemBarsTopPadding + AppBarHeight).roundToPx()
     }
 
-    val transparentAppBar by remember {
-        derivedStateOf {
-            lazyListState.firstVisibleItemIndex == 0 && lazyListState.firstVisibleItemScrollOffset < 100
-        }
-    }
-
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -982,10 +976,7 @@ fun ArtistScreen(
 
         // Top App Bar
         TopAppBar(
-            title = {
-                if (!transparentAppBar)
-                    Text(artistName)
-            },
+            title = { },
             navigationIcon = {
                 com.cgens67.avidtune.ui.component.IconButton(
                     onClick = navController::navigateUp,
@@ -1016,9 +1007,8 @@ fun ArtistScreen(
             },
             colors = TopAppBarDefaults.topAppBarColors(
                 containerColor = Color.Transparent,
-                scrolledContainerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.9f)
-            ),
-            scrollBehavior = scrollBehavior
+                scrolledContainerColor = Color.Transparent
+            )
         )
     }
 }
