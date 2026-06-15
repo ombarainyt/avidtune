@@ -42,6 +42,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.AssistChipDefaults
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularWavyProgressIndicator
 import androidx.compose.material3.ElevatedButton
@@ -62,7 +63,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.carousel.HorizontalCenteredHeroCarousel
 import androidx.compose.material3.carousel.HorizontalMultiBrowseCarousel
-    import androidx.compose.material3.carousel.rememberCarouselState
+import androidx.compose.material3.carousel.rememberCarouselState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -825,9 +826,7 @@ private fun NewsCarouselIndicator(
 }
 
 @Composable
-private fun NewsLoadingState(
-    modifier: Modifier = Modifier,
-) {
+private fun NewsLoadingState(modifier: Modifier = Modifier) {
     Box(
         contentAlignment = Alignment.Center,
         modifier = modifier.padding(24.dp),
@@ -835,9 +834,9 @@ private fun NewsLoadingState(
         ElevatedCard(
             shape = MaterialTheme.shapes.extraLarge,
             colors = MaterialTheme.colorScheme.surfaceContainerHigh.let {
-                androidx.compose.material3.CardDefaults.elevatedCardColors(containerColor = it)
+                CardDefaults.elevatedCardColors(containerColor = it)
             },
-            elevation = androidx.compose.material3.CardDefaults.elevatedCardElevation(defaultElevation = 6.dp)
+            elevation = CardDefaults.elevatedCardElevation(defaultElevation = 6.dp)
         ) {
             Column(
                 modifier = Modifier.padding(48.dp),
@@ -850,7 +849,7 @@ private fun NewsLoadingState(
                     trackColor = MaterialTheme.colorScheme.surfaceContainerHighest
                 )
                 Text(
-                    text = stringResource(R.string.loading_news),
+                    text = stringResource(R.string.loading),
                     style = MaterialTheme.typography.headlineSmall,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onSurface
@@ -1215,9 +1214,9 @@ private fun ViewNewsLoadingState(modifier: Modifier = Modifier) {
         ElevatedCard(
             shape = MaterialTheme.shapes.extraLarge,
             colors = MaterialTheme.colorScheme.surfaceContainerHigh.let {
-                androidx.compose.material3.CardDefaults.elevatedCardColors(containerColor = it)
+                CardDefaults.elevatedCardColors(containerColor = it)
             },
-            elevation = androidx.compose.material3.CardDefaults.elevatedCardElevation(defaultElevation = 6.dp)
+            elevation = CardDefaults.elevatedCardElevation(defaultElevation = 6.dp)
         ) {
             Column(
                 modifier = Modifier.padding(48.dp),
@@ -1253,9 +1252,9 @@ private fun ViewNewsErrorState(
         ElevatedCard(
             shape = MaterialTheme.shapes.extraLarge,
             colors = MaterialTheme.colorScheme.surfaceContainerHigh.let {
-                androidx.compose.material3.CardDefaults.elevatedCardColors(containerColor = it)
+                CardDefaults.elevatedCardColors(containerColor = it)
             },
-            elevation = androidx.compose.material3.CardDefaults.elevatedCardElevation(defaultElevation = 6.dp),
+            elevation = CardDefaults.elevatedCardElevation(defaultElevation = 6.dp),
             modifier = Modifier
                 .fillMaxWidth()
                 .widthIn(max = 560.dp),
