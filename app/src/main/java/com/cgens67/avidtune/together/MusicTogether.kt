@@ -70,6 +70,8 @@ import java.net.URI
 import java.net.URLDecoder
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
+import androidx.media3.common.Player
+import androidx.media3.common.MediaItem
 
 // --- PREFERENCES ---
 val TogetherAllowGuestsToAddTracksKey = booleanPreferencesKey("TogetherAllowGuestsToAddTracks")
@@ -84,7 +86,7 @@ val TogetherWelcomeShownKey = booleanPreferencesKey("TogetherWelcomeShown")
 @Serializable data class TogetherTrack(val id: String, val title: String, val artists: List<String> = emptyList(), val durationSec: Int = -1, val thumbnailUrl: String? = null)
 @Serializable data class TogetherParticipant(val id: String, val name: String, val isHost: Boolean = false, val isPending: Boolean = false, val isConnected: Boolean = true)
 @Serializable data class TogetherRoomSettings(val allowGuestsToAddTracks: Boolean = true, val allowGuestsToControlPlayback: Boolean = false, val requireHostApprovalToJoin: Boolean = false)
-@Serializable data class TogetherRoomState(val sessionId: String, val hostId: String, val participants: List<TogetherParticipant> = emptyList(), val settings: TogetherRoomSettings = TogetherRoomSettings(), val queue: List<TogetherTrack> = emptyList(), val queueHash: String = "", val currentIndex: Int = 0, val isPlaying: Boolean = false, val positionMs: Long = 0L, val repeatMode: Int = 0, val shuffleEnabled: Boolean = false, val sentAtElapsedRealtimeMs: Long = 0L)
+@Serializable data class TogetherRoomState(val sessionId: String, val hostId: String, val participants: List<TogetherParticipant> = emptyList(), val settings: TogetherRoomSettings = TogetherRoomSettings(), val queue: List<TogetherTrack> = emptyList(), val queueHash: String = "", val currentIndex: Int = 0, val isPlaying: Boolean = false, val positionMs: Long = 0L, val repeatMode: Int = 0, val shuffleEnabled: Boolean = false, val sentAtMs: Long = 0L)
 
 @Serializable sealed class TogetherRole { @Serializable data object Host : TogetherRole(); @Serializable data object Guest : TogetherRole() }
 sealed class TogetherSessionState { data object Idle : TogetherSessionState(); data class Hosting(val sessionId: String, val joinLink: String, val localAddressHint: String?, val port: Int, val settings: TogetherRoomSettings, val roomState: TogetherRoomState?) : TogetherSessionState(); data class Joining(val joinLink: String) : TogetherSessionState(); data class Joined(val role: TogetherRole, val sessionId: String, val selfParticipantId: String, val roomState: TogetherRoomState) : TogetherSessionState(); data class Error(val message: String, val recoverable: Boolean = true) : TogetherSessionState() }
@@ -126,16 +128,118 @@ class TogetherManager(val scope: CoroutineScope, val player: ExoPlayer) {
     private var clientSession: DefaultClientWebSocketSession? = null
     private val httpClient = HttpClient(ClientCIO) { install(WebSockets) }
     private var roomSettings = TogetherRoomSettings()
-    private val clients = ConcurrentHashMap<String, DefaultClientWebSocketSession>()
+
+    private val hostConnections = ConcurrentHashMap<String, io.ktor.websocket.DefaultWebSocketSession>()
+    private val hostParticipants = ConcurrentHashMap<String, TogetherParticipant>()
+    private var isHost = false
+    private var broadcastJob: Job? = null
+
+    private val playerListener = object : Player.Listener {
+        override fun onPlaybackStateChanged(playbackState: Int) {
+            if (isHost) broadcastRoomState()
+        }
+        override fun onPlayWhenReadyChanged(playWhenReady: Boolean, reason: Int) {
+            if (isHost) broadcastRoomState()
+        }
+        override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
+            if (isHost) broadcastRoomState()
+        }
+        override fun onPositionDiscontinuity(
+            oldPosition: Player.PositionInfo,
+            newPosition: Player.PositionInfo,
+            reason: Int
+        ) {
+            if (isHost && reason == Player.DISCONTINUITY_REASON_SEEK) {
+                broadcastRoomState()
+            }
+        }
+    }
+
+    init {
+        player.addListener(playerListener)
+    }
+
+    private fun getCurrentRoomState(sId: String): TogetherRoomState {
+        val currentItem = player.currentMediaItem
+        val trackId = currentItem?.mediaId ?: ""
+        val trackTitle = currentItem?.mediaMetadata?.title?.toString() ?: ""
+        val trackArtist = currentItem?.mediaMetadata?.artist?.toString() ?: ""
+        val trackArt = currentItem?.mediaMetadata?.artworkUri?.toString()
+
+        val currentTrack = TogetherTrack(
+            id = trackId,
+            title = trackTitle,
+            artists = listOf(trackArtist),
+            thumbnailUrl = trackArt
+        )
+
+        return TogetherRoomState(
+            sessionId = sId,
+            hostId = hostParticipants.values.firstOrNull { it.isHost }?.id ?: "host",
+            participants = hostParticipants.values.toList(),
+            settings = roomSettings,
+            queue = listOf(currentTrack),
+            queueHash = "",
+            currentIndex = 0,
+            isPlaying = player.isPlaying,
+            positionMs = player.currentPosition,
+            repeatMode = player.repeatMode,
+            shuffleEnabled = player.shuffleModeEnabled,
+            sentAtMs = System.currentTimeMillis()
+        )
+    }
+
+    private fun broadcastRoomState() {
+        val currentState = sessionState.value
+        if (currentState is TogetherSessionState.Hosting) {
+            val roomState = getCurrentRoomState(currentState.sessionId)
+            sessionState.value = currentState.copy(roomState = roomState)
+
+            val msg = TogetherJson.json.encodeToString(TogetherMessage.serializer(), RoomStateMessage(roomState))
+            scope.launch {
+                hostConnections.values.forEach { session ->
+                    try {
+                        session.send(msg)
+                    } catch (e: Exception) {
+                        // ignore
+                    }
+                }
+            }
+        }
+    }
+
+    private fun startPeriodicBroadcast() {
+        broadcastJob?.cancel()
+        broadcastJob = scope.launch {
+            while (isActive) {
+                delay(3000)
+                if (isHost && player.isPlaying) {
+                    broadcastRoomState()
+                }
+            }
+        }
+    }
 
     fun startTogetherHost(port: Int, displayName: String, settings: TogetherRoomSettings) {
         leaveTogether()
+        isHost = true
         scope.launch(Dispatchers.IO) {
             try {
                 roomSettings = settings
                 val sId = UUID.randomUUID().toString()
                 val sKey = UUID.randomUUID().toString()
                 val hostIp = getIpAddress() ?: "127.0.0.1"
+
+                hostParticipants.clear()
+                hostConnections.clear()
+
+                val myHostId = UUID.randomUUID().toString()
+                hostParticipants[myHostId] = TogetherParticipant(
+                    id = myHostId,
+                    name = displayName,
+                    isHost = true,
+                    isConnected = true
+                )
 
                 val engine = embeddedServer(CIO, port = port, host = "0.0.0.0") {
                     install(io.ktor.server.websocket.WebSockets)
@@ -144,8 +248,24 @@ class TogetherManager(val scope: CoroutineScope, val player: ExoPlayer) {
                             val txt = (incoming.receive() as? Frame.Text)?.readText() ?: return@webSocket
                             val hello = TogetherJson.json.decodeFromString<TogetherMessage>(txt) as? ClientHello ?: return@webSocket
                             val pId = UUID.randomUUID().toString()
-                            send(TogetherJson.json.encodeToString(TogetherMessage.serializer(), ServerWelcome(TogetherProtocolVersion, sId, pId, ServerRole.GUEST, false, roomSettings)))
-                            for (frame in incoming) { } // Keep-Alive loop
+
+                            hostParticipants[pId] = TogetherParticipant(
+                                id = pId,
+                                name = hello.displayName,
+                                isHost = false,
+                                isConnected = true
+                            )
+                            hostConnections[pId] = this@webSocket
+
+                            try {
+                                send(TogetherJson.json.encodeToString(TogetherMessage.serializer(), ServerWelcome(TogetherProtocolVersion, sId, pId, ServerRole.GUEST, false, roomSettings)))
+                                broadcastRoomState()
+                                for (frame in incoming) { } // Keep-Alive loop
+                            } finally {
+                                hostParticipants.remove(pId)
+                                hostConnections.remove(pId)
+                                broadcastRoomState()
+                            }
                         }
                     }
                 }
@@ -153,37 +273,109 @@ class TogetherManager(val scope: CoroutineScope, val player: ExoPlayer) {
                 serverEngine = engine
 
                 val link = TogetherLink.encode(TogetherJoinInfo(hostIp, port, sId, sKey))
-                sessionState.value = TogetherSessionState.Hosting(sId, link, hostIp, port, settings, TogetherRoomState(sId, "host"))
+                
+                withContext(Dispatchers.Main) {
+                    val rs = getCurrentRoomState(sId)
+                    sessionState.value = TogetherSessionState.Hosting(sId, link, hostIp, port, settings, rs)
+                }
+                startPeriodicBroadcast()
             } catch (e: Exception) {
                 e.printStackTrace()
-                sessionState.value = TogetherSessionState.Error(e.message ?: "Failed to start server")
+                withContext(Dispatchers.Main) {
+                    sessionState.value = TogetherSessionState.Error(e.message ?: "Failed to start server")
+                }
             }
         }
     }
 
     fun joinTogether(joinLink: String, displayName: String) {
         leaveTogether()
+        isHost = false
         scope.launch(Dispatchers.IO) {
             val info = TogetherLink.decode(joinLink)
             if (info == null) {
-                sessionState.value = TogetherSessionState.Error("Invalid link")
+                withContext(Dispatchers.Main) {
+                    sessionState.value = TogetherSessionState.Error("Invalid link")
+                }
                 return@launch
             }
-            sessionState.value = TogetherSessionState.Joining(joinLink)
+            withContext(Dispatchers.Main) {
+                sessionState.value = TogetherSessionState.Joining(joinLink)
+            }
             try {
                 httpClient.webSocket(info.toWebSocketUrl()) {
                     clientSession = this
-                    send(TogetherJson.json.encodeToString(TogetherMessage.serializer(), ClientHello(TogetherProtocolVersion, info.sessionId, info.sessionKey, UUID.randomUUID().toString(), displayName)))
-                    sessionState.value = TogetherSessionState.Joined(TogetherRole.Guest, info.sessionId, "guest", TogetherRoomState(info.sessionId, "host"))
-                    for (f in incoming) { }
+                    val myClientId = UUID.randomUUID().toString()
+                    send(TogetherJson.json.encodeToString(TogetherMessage.serializer(), ClientHello(TogetherProtocolVersion, info.sessionId, info.sessionKey, myClientId, displayName)))
+                    
+                    var selfPId = "guest"
+
+                    for (frame in incoming) {
+                        if (frame !is Frame.Text) continue
+                        val msgText = frame.readText()
+                        when (val msg = TogetherJson.json.decodeFromString<TogetherMessage>(msgText)) {
+                            is ServerWelcome -> {
+                                selfPId = msg.participantId
+                            }
+                            is RoomStateMessage -> {
+                                val rs = msg.state
+                                withContext(Dispatchers.Main) {
+                                    sessionState.value = TogetherSessionState.Joined(TogetherRole.Guest, info.sessionId, selfPId, rs)
+                                    syncPlayerToState(rs)
+                                }
+                            }
+                            else -> {}
+                        }
+                    }
                 }
             } catch (e: Exception) {
-                sessionState.value = TogetherSessionState.Error("Failed to connect: ${e.message}")
+                withContext(Dispatchers.Main) {
+                    sessionState.value = TogetherSessionState.Error("Failed to connect: ${e.message}")
+                }
             }
         }
     }
 
+    private suspend fun syncPlayerToState(state: TogetherRoomState) = withContext(Dispatchers.Main) {
+        val currentTrack = state.queue.getOrNull(state.currentIndex) ?: return@withContext
+
+        val myTrackId = player.currentMediaItem?.mediaId
+        if (myTrackId != currentTrack.id && currentTrack.id.isNotEmpty()) {
+            val mediaItem = MediaItem.Builder()
+                .setMediaId(currentTrack.id)
+                .setUri(currentTrack.id)
+                .setCustomCacheKey(currentTrack.id)
+                .setMediaMetadata(
+                    androidx.media3.common.MediaMetadata.Builder()
+                        .setTitle(currentTrack.title)
+                        .setArtist(currentTrack.artists.joinToString())
+                        .setArtworkUri(currentTrack.thumbnailUrl?.let { android.net.Uri.parse(it) })
+                        .build()
+                )
+                .build()
+            player.setMediaItem(mediaItem)
+            player.prepare()
+        }
+
+        if (state.isPlaying && !player.isPlaying) {
+            player.play()
+        } else if (!state.isPlaying && player.isPlaying) {
+            player.pause()
+        }
+
+        val expectedPosition = if (state.isPlaying && state.sentAtMs > 0) {
+            state.positionMs + (System.currentTimeMillis() - state.sentAtMs)
+        } else {
+            state.positionMs
+        }
+
+        if (kotlin.math.abs(player.currentPosition - expectedPosition) > 2000L) {
+            player.seekTo(expectedPosition)
+        }
+    }
+
     fun leaveTogether() {
+        broadcastJob?.cancel()
         val engineToStop = serverEngine
         serverEngine = null
         val sessionToClose = clientSession
