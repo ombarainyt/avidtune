@@ -27,7 +27,6 @@ import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
@@ -44,7 +43,6 @@ import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.navigation.NavController
-import coil.compose.AsyncImage
 import com.cgens67.avidtune.LocalPlayerAwareWindowInsets
 import com.cgens67.avidtune.LocalPlayerConnection
 import com.cgens67.avidtune.R
@@ -101,6 +99,9 @@ const val TogetherProtocolVersion: Int = 1
 @Serializable @SerialName("server_welcome") data class ServerWelcome(val protocolVersion: Int, val sessionId: String, val participantId: String, val role: ServerRole, val isPending: Boolean, val settings: TogetherRoomSettings) : TogetherMessage
 @Serializable @SerialName("room_state") data class RoomStateMessage(val state: TogetherRoomState) : TogetherMessage
 @Serializable @SerialName("join_decision") data class JoinDecision(val sessionId: String, val participantId: String, val approved: Boolean) : TogetherMessage
+@Serializable @SerialName("update_playback") data class UpdatePlayback(val positionMs: Long, val isPlaying: Boolean) : TogetherMessage
+@Serializable @SerialName("update_track") data class UpdateTrack(val track: TogetherTrack) : TogetherMessage
+@Serializable @SerialName("host_command") data class HostCommand(val command: String, val args: String = "") : TogetherMessage
 @Serializable enum class ServerRole { HOST, GUEST }
 
 // --- LINK & JSON ---
@@ -142,29 +143,84 @@ class TogetherManager(val scope: CoroutineScope, val player: ExoPlayer) {
     private var isHost = false
     private var broadcastJob: Job? = null
 
+    @Volatile private var isSyncing = false
+
     private val playerListener = object : Player.Listener {
         override fun onPlaybackStateChanged(playbackState: Int) {
+            if (isSyncing) return
             if (isHost) broadcastRoomState()
+            else sendGuestUpdate()
         }
         override fun onPlayWhenReadyChanged(playWhenReady: Boolean, reason: Int) {
+            if (isSyncing) return
             if (isHost) broadcastRoomState()
+            else sendGuestUpdate()
         }
         override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
+            if (isSyncing) return
             if (isHost) broadcastRoomState()
+            else sendGuestTrackUpdate(mediaItem)
         }
         override fun onPositionDiscontinuity(
             oldPosition: Player.PositionInfo,
             newPosition: Player.PositionInfo,
             reason: Int
         ) {
+            if (isSyncing) return
             if (isHost && reason == Player.DISCONTINUITY_REASON_SEEK) {
                 broadcastRoomState()
+            } else if (!isHost && reason == Player.DISCONTINUITY_REASON_SEEK) {
+                sendGuestUpdate()
             }
         }
     }
 
     init {
         player.addListener(playerListener)
+    }
+
+    private fun sendGuestUpdate() {
+        if (isHost || clientSession == null) return
+        scope.launch(Dispatchers.Main) {
+            val currentState = sessionState.value as? TogetherSessionState.Joined ?: return@launch
+            if (!currentState.roomState.settings.allowGuestsToControlPlayback) return@launch
+            
+            val msg = TogetherJson.json.encodeToString(
+                TogetherMessage.serializer(),
+                UpdatePlayback(
+                    positionMs = player.currentPosition,
+                    isPlaying = player.isPlaying
+                )
+            )
+            withContext(Dispatchers.IO) {
+                try { clientSession?.send(msg) } catch(e: Exception) {}
+            }
+        }
+    }
+
+    private fun sendGuestTrackUpdate(mediaItem: MediaItem?) {
+        if (isHost || clientSession == null || mediaItem == null) return
+        scope.launch(Dispatchers.Main) {
+            val currentState = sessionState.value as? TogetherSessionState.Joined ?: return@launch
+            if (!currentState.roomState.settings.allowGuestsToAddTracks) return@launch
+            
+            val customMeta = mediaItem.localConfiguration?.tag as? com.cgens67.avidtune.models.MediaMetadata
+            val trackId = mediaItem.mediaId
+            val trackTitle = customMeta?.title ?: mediaItem.mediaMetadata.title?.toString() ?: ""
+            val trackArtists = customMeta?.artists?.map { it.name } ?: listOf(mediaItem.mediaMetadata.artist?.toString() ?: "")
+            val trackArt = customMeta?.thumbnailUrl ?: mediaItem.mediaMetadata.artworkUri?.toString()
+            val durationSec = customMeta?.duration ?: -1
+
+            val track = TogetherTrack(trackId, trackTitle, trackArtists, durationSec, trackArt)
+            
+            val msg = TogetherJson.json.encodeToString(
+                TogetherMessage.serializer(),
+                UpdateTrack(track)
+            )
+            withContext(Dispatchers.IO) {
+                try { clientSession?.send(msg) } catch(e: Exception) {}
+            }
+        }
     }
 
     // IMPORTANT: Call this ONLY from the Main thread because ExoPlayer is accessed here
@@ -279,28 +335,90 @@ class TogetherManager(val scope: CoroutineScope, val player: ExoPlayer) {
                                         TogetherJson.json.decodeFromString<TogetherMessage>(txt) 
                                     } catch (e: Exception) { null }
                                     
-                                    if (msg is ClientHello) {
-                                        pId = UUID.randomUUID().toString()
-                                        hostParticipants[pId] = TogetherParticipant(
-                                            id = pId,
-                                            name = msg.displayName,
-                                            isHost = false,
-                                            isConnected = true
-                                        )
-                                        hostConnections[pId] = this@webSocket
-                                        
-                                        send(TogetherJson.json.encodeToString(
-                                            TogetherMessage.serializer(), 
-                                            ServerWelcome(
-                                                protocolVersion = TogetherProtocolVersion, 
-                                                sessionId = sId, 
-                                                participantId = pId, 
-                                                role = ServerRole.GUEST, 
-                                                isPending = false, 
-                                                settings = roomSettings
+                                    when (msg) {
+                                        is ClientHello -> {
+                                            val isPending = roomSettings.requireHostApprovalToJoin
+                                            pId = UUID.randomUUID().toString()
+                                            hostParticipants[pId] = TogetherParticipant(
+                                                id = pId,
+                                                name = msg.displayName,
+                                                isHost = false,
+                                                isConnected = true,
+                                                isPending = isPending
                                             )
-                                        ))
-                                        broadcastRoomState()
+                                            hostConnections[pId] = this@webSocket
+                                            
+                                            send(TogetherJson.json.encodeToString(
+                                                TogetherMessage.serializer(), 
+                                                ServerWelcome(
+                                                    protocolVersion = TogetherProtocolVersion, 
+                                                    sessionId = sId, 
+                                                    participantId = pId, 
+                                                    role = ServerRole.GUEST, 
+                                                    isPending = isPending, 
+                                                    settings = roomSettings
+                                                )
+                                            ))
+                                            broadcastRoomState()
+                                        }
+                                        is UpdatePlayback -> {
+                                            if (roomSettings.allowGuestsToControlPlayback) {
+                                                val p = hostParticipants[pId]
+                                                if (p != null && !p.isPending) {
+                                                    withContext(Dispatchers.Main) {
+                                                        isSyncing = true
+                                                        if (msg.isPlaying && !player.isPlaying) player.play()
+                                                        else if (!msg.isPlaying && player.isPlaying) player.pause()
+                                                        
+                                                        if (kotlin.math.abs(player.currentPosition - msg.positionMs) > 1000L) {
+                                                            player.seekTo(msg.positionMs)
+                                                        }
+                                                        isSyncing = false
+                                                    }
+                                                    broadcastRoomState()
+                                                }
+                                            }
+                                        }
+                                        is UpdateTrack -> {
+                                            if (roomSettings.allowGuestsToAddTracks) {
+                                                val p = hostParticipants[pId]
+                                                if (p != null && !p.isPending) {
+                                                    withContext(Dispatchers.Main) {
+                                                        isSyncing = true
+                                                        val customMetadata = com.cgens67.avidtune.models.MediaMetadata(
+                                                            id = msg.track.id,
+                                                            title = msg.track.title,
+                                                            artists = msg.track.artists.map { com.cgens67.avidtune.models.MediaMetadata.Artist(id = null, name = it) },
+                                                            duration = msg.track.durationSec,
+                                                            thumbnailUrl = msg.track.thumbnailUrl,
+                                                            album = null,
+                                                            explicit = false,
+                                                            liked = false
+                                                        )
+                                                        val mediaItem = MediaItem.Builder()
+                                                            .setMediaId(msg.track.id)
+                                                            .setUri(msg.track.id)
+                                                            .setCustomCacheKey(msg.track.id)
+                                                            .setTag(customMetadata)
+                                                            .setMediaMetadata(
+                                                                androidx.media3.common.MediaMetadata.Builder()
+                                                                    .setTitle(msg.track.title)
+                                                                    .setArtist(msg.track.artists.joinToString(", "))
+                                                                    .setArtworkUri(msg.track.thumbnailUrl?.let { android.net.Uri.parse(it) })
+                                                                    .setMediaType(androidx.media3.common.MediaMetadata.MEDIA_TYPE_MUSIC)
+                                                                    .build()
+                                                            )
+                                                            .build()
+                                                        player.setMediaItem(mediaItem)
+                                                        player.prepare()
+                                                        player.play()
+                                                        isSyncing = false
+                                                    }
+                                                    broadcastRoomState()
+                                                }
+                                            }
+                                        }
+                                        else -> {}
                                     }
                                 }
                             } catch (e: Exception) {
@@ -369,7 +487,26 @@ class TogetherManager(val scope: CoroutineScope, val player: ExoPlayer) {
                                         val rs = msg.state
                                         withContext(Dispatchers.Main) {
                                             sessionState.value = TogetherSessionState.Joined(TogetherRole.Guest, info.sessionId, selfPId, rs)
-                                            syncPlayerToState(rs)
+                                            val isPending = rs.participants.find { it.id == selfPId }?.isPending == true
+                                            if (!isPending) {
+                                                syncPlayerToState(rs)
+                                            }
+                                        }
+                                    }
+                                    is HostCommand -> {
+                                        if (msg.command == "KICK") {
+                                            withContext(Dispatchers.Main) {
+                                                sessionState.value = TogetherSessionState.Error("You have been disconnected from the session.")
+                                            }
+                                            close()
+                                        }
+                                    }
+                                    is JoinDecision -> {
+                                        if (!msg.approved) {
+                                            withContext(Dispatchers.Main) {
+                                                sessionState.value = TogetherSessionState.Error("Your request to join was denied.")
+                                            }
+                                            close()
                                         }
                                     }
                                     else -> {}
@@ -413,6 +550,7 @@ class TogetherManager(val scope: CoroutineScope, val player: ExoPlayer) {
 
         val myTrackId = player.currentMediaItem?.mediaId
         if (myTrackId != currentTrack.id && currentTrack.id.isNotEmpty()) {
+            isSyncing = true
             val customMetadata = com.cgens67.avidtune.models.MediaMetadata(
                 id = currentTrack.id,
                 title = currentTrack.title,
@@ -440,12 +578,17 @@ class TogetherManager(val scope: CoroutineScope, val player: ExoPlayer) {
                 .build()
             player.setMediaItem(mediaItem)
             player.prepare()
+            isSyncing = false
         }
 
         if (state.isPlaying && !player.isPlaying) {
+            isSyncing = true
             player.play()
+            isSyncing = false
         } else if (!state.isPlaying && player.isPlaying) {
+            isSyncing = true
             player.pause()
+            isSyncing = false
         }
 
         val expectedPosition = if (state.isPlaying && state.sentAtMs > 0) {
@@ -455,7 +598,9 @@ class TogetherManager(val scope: CoroutineScope, val player: ExoPlayer) {
         }
 
         if (kotlin.math.abs(player.currentPosition - expectedPosition) > 2000L) {
+            isSyncing = true
             player.seekTo(expectedPosition)
+            isSyncing = false
         }
     }
 
@@ -482,15 +627,45 @@ class TogetherManager(val scope: CoroutineScope, val player: ExoPlayer) {
         }
     }
 
-    fun updateSettings(s: TogetherRoomSettings) { 
-        roomSettings = s
-        if (isHost) {
+    fun updateSettings(s: TogetherRoomSettings) { roomSettings = s }
+
+    fun kickParticipant(pId: String) {
+        if (!isHost) return
+        scope.launch {
+            val conn = hostConnections.remove(pId)
+            hostParticipants.remove(pId)
+            try {
+                conn?.send(TogetherJson.json.encodeToString(TogetherMessage.serializer(), HostCommand("KICK")))
+                conn?.close()
+            } catch(e: Exception) {}
             broadcastRoomState()
         }
     }
-    fun kickParticipant(p: String) {}
-    fun banParticipant(p: String) {}
-    fun approveParticipant(p: String, a: Boolean) {}
+
+    fun banParticipant(pId: String) {
+        if (!isHost) return
+        kickParticipant(pId)
+    }
+
+    fun approveParticipant(pId: String, approved: Boolean) {
+        if (!isHost) return
+        scope.launch {
+            if (approved) {
+                val p = hostParticipants[pId]
+                if (p != null) {
+                    hostParticipants[pId] = p.copy(isPending = false)
+                    val conn = hostConnections[pId]
+                    try {
+                        val sId = (sessionState.value as? TogetherSessionState.Hosting)?.sessionId ?: ""
+                        conn?.send(TogetherJson.json.encodeToString(TogetherMessage.serializer(), JoinDecision(sId, pId, true)))
+                    } catch(e: Exception) {}
+                    broadcastRoomState()
+                }
+            } else {
+                kickParticipant(pId)
+            }
+        }
+    }
 
     private fun getIpAddress(): String? = java.net.NetworkInterface.getNetworkInterfaces().toList()
         .flatMap { it.inetAddresses.toList() }
@@ -511,6 +686,27 @@ fun MusicTogetherScreen(
     @Suppress("DEPRECATION")
     val clipboard = LocalClipboardManager.current
     val haptic = LocalHapticFeedback.current
+    val coroutineScope = rememberCoroutineScope()
+
+    var isVisible by remember { mutableStateOf(false) }
+
+    LaunchedEffect(Unit) {
+        isVisible = true
+    }
+
+    val handleBack: () -> Unit = {
+        if (isVisible) {
+            isVisible = false
+            coroutineScope.launch {
+                delay(300) // Match exit animation duration
+                onBack()
+            }
+        }
+    }
+
+    BackHandler(enabled = isVisible) {
+        handleBack()
+    }
 
     val (welcomeShown, setWelcomeShown) = rememberPreference(TogetherWelcomeShownKey, false)
     var welcomeDismissedThisSession by rememberSaveable { mutableStateOf(false) }
@@ -619,219 +815,54 @@ fun MusicTogetherScreen(
         )
     }
 
-    val handleBack: () -> Unit = {
-        onBack()
-        navController.navigateUp()
-    }
-    
-    BackHandler {
-        handleBack()
-    }
+    AnimatedVisibility(
+        visible = isVisible,
+        enter = fadeIn(spring(dampingRatio = Spring.DampingRatioMediumBouncy)) +
+                slideInHorizontally(
+                    initialOffsetX = { it },
+                    animationSpec = spring(stiffness = Spring.StiffnessLow)
+                ),
+        exit = fadeOut(spring(dampingRatio = Spring.DampingRatioLowBouncy)) +
+                slideOutHorizontally(
+                    targetOffsetX = { it },
+                    animationSpec = spring(stiffness = Spring.StiffnessMediumLow)
+                ),
+        modifier = Modifier.fillMaxSize().zIndex(100f)
+    ) {
+        Box(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surface)) {
+            Column(
+                Modifier
+                    .windowInsetsPadding(LocalPlayerAwareWindowInsets.current.only(WindowInsetsSides.Horizontal + WindowInsetsSides.Bottom))
+                    .verticalScroll(rememberScrollState()),
+            ) {
+                Spacer(Modifier.windowInsetsPadding(LocalPlayerAwareWindowInsets.current.only(WindowInsetsSides.Top)))
+                Spacer(Modifier.height(64.dp)) // To account for TopAppBar height
 
-    Scaffold(
-        topBar = {
+                StatusCard(state = sessionState, onCopyLink = { link -> clipboard.setText(AnnotatedString(link)); haptic.performHapticFeedback(HapticFeedbackType.LongPress); Toast.makeText(context, R.string.copied, Toast.LENGTH_SHORT).show() }, onShareLink = { link -> context.startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).apply { type = "text/plain"; putExtra(Intent.EXTRA_TEXT, link) }, null)) }, onLeave = { playerConnection?.service?.leaveTogether() }, modifier = Modifier.padding(horizontal = 16.dp).padding(top = 4.dp, bottom = 12.dp))
+
+                if (hostingLan?.roomState != null && isHostRole) {
+                    OnlineParticipantsCard(participants = hostingLan.roomState.participants, hostApprovalEnabled = hostingLan.settings.requireHostApprovalToJoin, onApprove = { pid, approved -> playerConnection?.service?.approveTogetherParticipant(pid, approved) }, onKick = { confirmKickParticipantId = it }, onBan  = { confirmBanParticipantId  = it }, modifier = Modifier.padding(horizontal = 16.dp).padding(bottom = 12.dp))
+                }
+
+                if (!isJoinedAsGuest) {
+                    HostSectionCard(displayName = displayName, port = port, allowAddTracks = allowAddTracks, allowControlPlayback = allowControlPlayback, requireApproval = requireApproval, onShowNameDialog = { showNameDialog = true }, onShowPortDialog = { showPortDialog = true }, onAllowAddTracksChange = setAllowAddTracks, onAllowControlPlaybackChange = setAllowControlPlayback, onRequireApprovalChange = setRequireApproval, isStartEnabled = !isCreatingSessionLoading && !isJoining && !isHosting && sessionState !is TogetherSessionState.Joined, isLoading = isCreatingSessionLoading, onStartSession = { playerConnection?.service?.startTogetherHost(port = port, displayName = displayName, settings = TogetherRoomSettings(allowGuestsToAddTracks = allowAddTracks, allowGuestsToControlPlayback = allowControlPlayback, requireHostApprovalToJoin = requireApproval)) }, modifier = Modifier.padding(horizontal = 16.dp).padding(bottom = 12.dp))
+                }
+
+                JoinSectionCard(joinInput = joinInput, onJoinInputChange = { joinInput = it }, canJoin = canJoin, disableJoinUi = disableJoinUi, isJoined = isJoinedAsAcceptedGuest, isWaitingApproval = isWaitingApproval, isJoining = isJoining, onShowJoinDialog = { showJoinDialog = true }, onPasteFromClipboard = { val text = clipboard.getText()?.text?.trim() ?: ""; if (text.isNotBlank()) { joinInput = text; haptic.performHapticFeedback(HapticFeedbackType.LongPress); if (TogetherLink.decode(text) != null) { setLastJoinLink(text); playerConnection?.service?.joinTogether(text, displayName) } } }, onJoin = { val trimmed = joinInput.trim(); setLastJoinLink(trimmed); playerConnection?.service?.joinTogether(trimmed, displayName) }, modifier = Modifier.padding(horizontal = 16.dp).padding(bottom = 16.dp))
+            }
+
             TopAppBar(
                 title = { Text(stringResource(R.string.music_together)) },
                 navigationIcon = {
-                    AtIconButton(onClick = handleBack, onLongClick = { onBack(); navController.backToMain() }) {
+                    AtIconButton(onClick = handleBack, onLongClick = { handleBack(); navController.backToMain() }) {
                         Icon(painterResource(R.drawable.arrow_back), null)
                     }
                 },
                 scrollBehavior = scrollBehavior,
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surface,
-                    scrolledContainerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.95f)
+                    containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.95f)
                 )
             )
-        },
-        containerColor = MaterialTheme.colorScheme.surface
-    ) { innerPadding ->
-        Column(
-            Modifier
-                .fillMaxSize()
-                .padding(innerPadding)
-                .windowInsetsPadding(LocalPlayerAwareWindowInsets.current.only(WindowInsetsSides.Horizontal + WindowInsetsSides.Bottom))
-                .verticalScroll(rememberScrollState())
-                .padding(horizontal = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
-        ) {
-            Spacer(Modifier.height(8.dp))
-
-            StatusCard(state = sessionState, onCopyLink = { link -> clipboard.setText(AnnotatedString(link)); haptic.performHapticFeedback(HapticFeedbackType.LongPress); Toast.makeText(context, R.string.copied, Toast.LENGTH_SHORT).show() }, onShareLink = { link -> context.startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).apply { type = "text/plain"; putExtra(Intent.EXTRA_TEXT, link) }, null)) }, onLeave = { playerConnection?.service?.leaveTogether() })
-
-            val roomState = (sessionState as? TogetherSessionState.Hosting)?.roomState ?: (sessionState as? TogetherSessionState.Joined)?.roomState
-            val selfId = (sessionState as? TogetherSessionState.Joined)?.selfParticipantId
-
-            if (roomState != null) {
-                val currentTrack = roomState.queue.getOrNull(roomState.currentIndex)
-                if (currentTrack != null && currentTrack.id.isNotEmpty()) {
-                    NowPlayingCard(track = currentTrack, isPlaying = roomState.isPlaying)
-                }
-
-                ParticipantsListCard(
-                    participants = roomState.participants,
-                    hostApprovalEnabled = roomState.settings.requireHostApprovalToJoin,
-                    isHostRole = isHostRole,
-                    selfId = selfId,
-                    onApprove = { pid, app -> playerConnection?.service?.approveTogetherParticipant(pid, app) },
-                    onKick = { confirmKickParticipantId = it },
-                    onBan = { confirmBanParticipantId = it }
-                )
-            }
-
-            if (!isJoinedAsGuest) {
-                HostSectionCard(displayName = displayName, port = port, allowAddTracks = allowAddTracks, allowControlPlayback = allowControlPlayback, requireApproval = requireApproval, onShowNameDialog = { showNameDialog = true }, onShowPortDialog = { showPortDialog = true }, onAllowAddTracksChange = setAllowAddTracks, onAllowControlPlaybackChange = setAllowControlPlayback, onRequireApprovalChange = setRequireApproval, isStartEnabled = !isCreatingSessionLoading && !isJoining && !isHosting && sessionState !is TogetherSessionState.Joined, isLoading = isCreatingSessionLoading, onStartSession = { playerConnection?.service?.startTogetherHost(port = port, displayName = displayName, settings = TogetherRoomSettings(allowGuestsToAddTracks = allowAddTracks, allowGuestsToControlPlayback = allowControlPlayback, requireHostApprovalToJoin = requireApproval)) })
-            }
-
-            JoinSectionCard(joinInput = joinInput, onJoinInputChange = { joinInput = it }, canJoin = canJoin, disableJoinUi = disableJoinUi, isJoined = isJoinedAsAcceptedGuest, isWaitingApproval = isWaitingApproval, isJoining = isJoining, onShowJoinDialog = { showJoinDialog = true }, onPasteFromClipboard = { val text = clipboard.getText()?.text?.trim() ?: ""; if (text.isNotBlank()) { joinInput = text; haptic.performHapticFeedback(HapticFeedbackType.LongPress); if (TogetherLink.decode(text) != null) { setLastJoinLink(text); playerConnection?.service?.joinTogether(text, displayName) } } }, onJoin = { val trimmed = joinInput.trim(); setLastJoinLink(trimmed); playerConnection?.service?.joinTogether(trimmed, displayName) })
-
-            Spacer(Modifier.height(32.dp))
-        }
-    }
-}
-
-@Composable
-private fun NowPlayingCard(
-    track: TogetherTrack,
-    isPlaying: Boolean,
-    modifier: Modifier = Modifier
-) {
-    Card(
-        modifier = modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(24.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
-        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
-    ) {
-        Column(modifier = Modifier.padding(vertical = 8.dp)) {
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 12.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Box(modifier = Modifier.size(40.dp).clip(RoundedCornerShape(14.dp)).background(MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)), contentAlignment = Alignment.Center) {
-                    Icon(painterResource(R.drawable.music_note), null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
-                }
-                Spacer(Modifier.width(12.dp))
-                Column(modifier = Modifier.weight(1f)) {
-                    Text("Now Playing", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-                    Text("Synced with host", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-            }
-
-            HorizontalDivider(modifier = Modifier.padding(horizontal = 18.dp), color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))
-
-            Row(
-                modifier = Modifier.padding(horizontal = 18.dp, vertical = 12.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                AsyncImage(
-                    model = track.thumbnailUrl,
-                    contentDescription = null,
-                    modifier = Modifier.size(56.dp).clip(RoundedCornerShape(12.dp)),
-                    contentScale = ContentScale.Crop
-                )
-                Spacer(Modifier.width(14.dp))
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(track.title, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    Text(track.artists.joinToString(), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                }
-                Spacer(Modifier.width(12.dp))
-                Box(
-                    modifier = Modifier.size(44.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primary),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        painterResource(if (isPlaying) R.drawable.pause else R.drawable.play),
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.onPrimary,
-                        modifier = Modifier.size(22.dp)
-                    )
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun ParticipantsListCard(
-    participants: List<TogetherParticipant>,
-    hostApprovalEnabled: Boolean,
-    isHostRole: Boolean,
-    selfId: String?,
-    onApprove: (String, Boolean) -> Unit,
-    onKick: (String) -> Unit,
-    onBan: (String) -> Unit,
-    modifier: Modifier = Modifier
-) {
-    Card(
-        modifier = modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(24.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)
-    ) {
-        Column(modifier = Modifier.padding(vertical = 8.dp)) {
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 12.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Box(modifier = Modifier.size(40.dp).clip(RoundedCornerShape(14.dp)).background(MaterialTheme.colorScheme.tertiary.copy(alpha = 0.15f)), contentAlignment = Alignment.Center) {
-                    Icon(painterResource(R.drawable.person), null, tint = MaterialTheme.colorScheme.tertiary, modifier = Modifier.size(20.dp))
-                }
-                Spacer(Modifier.width(12.dp))
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(stringResource(R.string.together_participants), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-                    Text(stringResource(R.string.together_connected_count, participants.size), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-            }
-
-            participants.forEachIndexed { index, p ->
-                if (index > 0) {
-                    HorizontalDivider(modifier = Modifier.padding(horizontal = 18.dp), color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))
-                }
-                Row(
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 12.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    val accent = if (p.isHost) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.secondary
-                    Box(
-                        modifier = Modifier.size(40.dp).clip(CircleShape).background(accent.copy(alpha = 0.2f)),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(p.name.firstOrNull()?.uppercase() ?: "?", color = accent, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
-                    }
-                    Spacer(Modifier.width(14.dp))
-                    Column(modifier = Modifier.weight(1f)) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text(p.name, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
-                            if (p.id == selfId) {
-                                Spacer(Modifier.width(6.dp))
-                                Surface(color = MaterialTheme.colorScheme.surfaceVariant, shape = RoundedCornerShape(4.dp)) {
-                                    Text("You", style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp))
-                                }
-                            }
-                        }
-                        Text(
-                            text = when {
-                                p.isHost -> stringResource(R.string.together_role_host)
-                                p.isPending && hostApprovalEnabled -> stringResource(R.string.together_pending_approval)
-                                else -> stringResource(R.string.together_role_guest)
-                            },
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-
-                    if (isHostRole && !p.isHost) {
-                        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                            if (p.isPending && hostApprovalEnabled) {
-                                AtIconButton(onClick = { onApprove(p.id, true) }, onLongClick = {}) { Icon(painterResource(R.drawable.check), null, tint = MaterialTheme.colorScheme.primary) }
-                                AtIconButton(onClick = { onApprove(p.id, false) }, onLongClick = {}) { Icon(painterResource(R.drawable.close), null, tint = MaterialTheme.colorScheme.error) }
-                            } else {
-                                AtIconButton(onClick = { onKick(p.id) }, onLongClick = {}) { Icon(painterResource(R.drawable.remove), null, tint = MaterialTheme.colorScheme.onSurfaceVariant) }
-                                AtIconButton(onClick = { onBan(p.id) }, onLongClick = {}) { Icon(painterResource(R.drawable.close), null, tint = MaterialTheme.colorScheme.error) }
-                            }
-                        }
-                    }
-                }
-            }
         }
     }
 }
@@ -919,11 +950,29 @@ private fun StatusCard(state: TogetherSessionState, onCopyLink: (String) -> Unit
                     Column(modifier = Modifier.weight(1f)) {
                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) { Text(stringResource(R.string.together_status), style = MaterialTheme.typography.labelLarge, color = statusColor); if (isActive && !isError) { Box(modifier = Modifier.size(8.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primary)) } }
                         Text(text = when (state) { TogetherSessionState.Idle -> stringResource(R.string.together_idle); is TogetherSessionState.Hosting -> stringResource(R.string.together_hosting); is TogetherSessionState.Joining -> stringResource(R.string.together_joining); is TogetherSessionState.Joined -> if (isWaitingApproval) stringResource(R.string.together_waiting_approval) else stringResource(R.string.together_connected); is TogetherSessionState.Error -> stringResource(R.string.together_error_state); else -> "" }, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                        
+                        // Add track playing indicator inside the status card if active and not pending
+                        if (isActive && !isError && !isWaitingApproval) {
+                            val trackTitle = when (state) {
+                                is TogetherSessionState.Hosting -> state.roomState?.queue?.getOrNull(state.roomState.currentIndex)?.title
+                                is TogetherSessionState.Joined -> state.roomState.queue.getOrNull(state.roomState.currentIndex)?.title
+                                else -> null
+                            }
+                            if (!trackTitle.isNullOrBlank()) {
+                                Spacer(Modifier.height(4.dp))
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(painterResource(R.drawable.music_note), null, modifier = Modifier.size(12.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    Spacer(Modifier.width(4.dp))
+                                    Text(trackTitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                }
+                            }
+                        }
                     }
                     if (isActive) { FilledTonalButton(onClick = onLeave, shape = RoundedCornerShape(14.dp)) { Icon(painterResource(R.drawable.arrow_back), null, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text(stringResource(R.string.leave), fontWeight = FontWeight.SemiBold) } }
                 }
                 when (state) {
                     is TogetherSessionState.Hosting -> { LanSessionLinkCard(link = state.joinLink, localAddressHint = state.localAddressHint, port = state.port, onCopy  = { onCopyLink(state.joinLink) }, onShare = { onShareLink(state.joinLink) }) }
+                    is TogetherSessionState.Joined -> { if (!isWaitingApproval) { ParticipantsCard(participants = state.roomState.participants.map { it.name }) } }
                     is TogetherSessionState.Error -> { Card(shape = RoundedCornerShape(18.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.4f)), elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)) { Text(text = state.message, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onErrorContainer, modifier = Modifier.padding(14.dp)) } }
                     else -> Unit
                 }
@@ -939,6 +988,26 @@ private fun LanSessionLinkCard(link: String, localAddressHint: String?, port: In
             if (localAddressHint != null) { Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) { Surface(shape = RoundedCornerShape(50.dp), color = MaterialTheme.colorScheme.primaryContainer) { Row(modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) { Icon(painterResource(R.drawable.wifi_proxy), contentDescription = null, tint = MaterialTheme.colorScheme.onPrimaryContainer, modifier = Modifier.size(13.dp)); Text(text = "$localAddressHint:$port", style = MaterialTheme.typography.labelMedium.copy(fontFamily = FontFamily.Monospace), fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onPrimaryContainer) } }; Text(stringResource(R.string.session_link), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.SemiBold) } }
             Surface(shape = RoundedCornerShape(14.dp), color = MaterialTheme.colorScheme.surface.copy(alpha = 0.6f), modifier = Modifier.fillMaxWidth()) { Box(modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 14.dp, vertical = 10.dp)) { Text(text = link, style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace), color = MaterialTheme.colorScheme.primary, maxLines = 2) } }
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) { Button(onClick = onCopy, shape = RoundedCornerShape(14.dp), colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary), modifier = Modifier.weight(1f)) { Icon(painterResource(R.drawable.content_copy), contentDescription = null, modifier = Modifier.size(16.dp)); Spacer(Modifier.width(6.dp)); Text(stringResource(R.string.copy_link), fontWeight = FontWeight.SemiBold) }; FilledTonalButton(onClick = onShare, shape = RoundedCornerShape(14.dp), modifier = Modifier.weight(1f)) { Icon(painterResource(R.drawable.share), contentDescription = null, modifier = Modifier.size(16.dp)); Spacer(Modifier.width(6.dp)); Text(stringResource(R.string.share), fontWeight = FontWeight.SemiBold) } }
+        }
+    }
+}
+
+@Composable
+private fun OnlineParticipantsCard(participants: List<TogetherParticipant>, hostApprovalEnabled: Boolean, onApprove: (String, Boolean) -> Unit, onKick: (String) -> Unit, onBan: (String) -> Unit, modifier: Modifier = Modifier) {
+    Card(modifier = modifier.fillMaxWidth().animateContentSize(spring(stiffness = Spring.StiffnessMediumLow)), shape = RoundedCornerShape(28.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow), elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)) {
+        Column(modifier = Modifier.padding(vertical = 8.dp)) {
+            Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) { Box(modifier = Modifier.size(40.dp).clip(RoundedCornerShape(14.dp)).background(Brush.linearGradient(listOf(MaterialTheme.colorScheme.tertiary.copy(alpha = 0.18f), MaterialTheme.colorScheme.tertiary.copy(alpha = 0.08f)))), contentAlignment = Alignment.Center) { Icon(painterResource(R.drawable.list), contentDescription = null, tint = MaterialTheme.colorScheme.tertiary, modifier = Modifier.size(22.dp)) }; Column(modifier = Modifier.weight(1f)) { Text(stringResource(R.string.together_participants), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold); Text(stringResource(R.string.together_connected_count, participants.size), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) } }
+            participants.forEachIndexed { index, participant -> key(participant.id) { if (index != 0) { HorizontalDivider(modifier = Modifier.padding(start = 76.dp, end = 18.dp), thickness = 0.5.dp, color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f)) }; val accent = if (participant.isHost) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.secondary; Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) { Box(modifier = Modifier.size(44.dp).clip(RoundedCornerShape(16.dp)).background(accent.copy(alpha = 0.14f)), contentAlignment = Alignment.Center) { Icon(painterResource(if (participant.isHost) R.drawable.auto_awesome else R.drawable.person), contentDescription = null, tint = accent, modifier = Modifier.size(22.dp)) }; Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) { Text(participant.name, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis); Text(text = when { participant.isHost -> stringResource(R.string.together_role_host); participant.isPending && hostApprovalEnabled -> stringResource(R.string.together_pending_approval); else -> stringResource(R.string.together_role_guest) }, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis) }; if (!participant.isHost) { Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) { if (participant.isPending && hostApprovalEnabled) { AtIconButton(onClick = { onApprove(participant.id, true) }, onLongClick = {}) { Icon(painterResource(R.drawable.check), null) }; AtIconButton(onClick = { onApprove(participant.id, false) }, onLongClick = {}) { Icon(painterResource(R.drawable.close), null) } }; AtIconButton(onClick = { onKick(participant.id) }, onLongClick = {}) { Icon(painterResource(R.drawable.remove), null) }; AtIconButton(onClick = { onBan(participant.id) }, onLongClick = {}) { Icon(painterResource(R.drawable.close), null) } } } } } }
+        }
+    }
+}
+
+@Composable
+private fun ParticipantsCard(participants: List<String>) {
+    Card(shape = RoundedCornerShape(20.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.6f)), elevation = CardDefaults.cardElevation(defaultElevation = 0.dp), modifier = Modifier.fillMaxWidth()) {
+        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) { Icon(painterResource(R.drawable.person), contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(18.dp)); Text(stringResource(R.string.participants), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold) }
+            Text(text = participants.joinToString(" · "), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 3, overflow = TextOverflow.Ellipsis)
         }
     }
 }
