@@ -136,7 +136,6 @@ import com.cgens67.avidtune.constants.AccountNameKey
 import com.cgens67.avidtune.constants.InnerTubeCookieKey
 import com.cgens67.avidtune.ui.component.IconButton
 import com.cgens67.avidtune.ui.component.TopSearch
-import com.cgens67.avidtune.ui.screens.Screens
 import com.cgens67.avidtune.ui.utils.backToMain
 import com.cgens67.avidtune.utils.rememberPreference
 import com.cgens67.avidtune.viewmodels.HomeViewModel
@@ -304,6 +303,16 @@ fun SettingsScreen(
     var hasUpdate by remember { mutableStateOf(false) }
     var fetchedLatestVersion by remember { mutableStateOf(BuildConfig.VERSION_NAME) }
 
+    var showTogetherScreen by remember { mutableStateOf(false) }
+
+    if (showTogetherScreen) {
+        com.cgens67.avidtune.together.MusicTogetherScreen(
+            navController = navController,
+            scrollBehavior = scrollBehavior,
+            onBack = { showTogetherScreen = false }
+        )
+        return // Stop rendering SettingsScreen beneath it
+    }
 
     // Search History State
     val prefs = context.getSharedPreferences("settings_search_history", Context.MODE_PRIVATE)
@@ -412,7 +421,7 @@ fun SettingsScreen(
     }
 
     val quickActions = buildQuickActions(navController, resetSearch)
-    val integrationActions = buildIntegrationActions(navController, resetSearch)
+    val integrationActions = buildIntegrationActions(navController, resetSearch) { showTogetherScreen = true }
     val settingsGroups = buildSettingsGroups(navController, resetSearch, onChangelogClick = { navController.navigate("settings/changelog") }, hasUnreadNews)
     val internalItems = buildInternalItems(navController, resetSearch)
 
@@ -740,14 +749,15 @@ private fun buildQuickActions(navController: NavController, resetSearch: () -> U
 @Composable
 private fun buildIntegrationActions(
     navController: NavController, 
-    resetSearch: () -> Unit
+    resetSearch: () -> Unit,
+    onTogetherClick: () -> Unit
 ): List<SettingsIntegrationAction> {
     val uriHandler = LocalUriHandler.current
     return listOf(
         SettingsIntegrationAction(
             icon = painterResource(R.drawable.person),
             label = stringResource(R.string.music_together),
-            onClick = { resetSearch(); navController.navigate(Screens.Together.route) },
+            onClick = { resetSearch(); onTogetherClick() },
             accentColor = Color(0xFF1DB954)
         ),
         SettingsIntegrationAction(
