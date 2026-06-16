@@ -36,12 +36,13 @@ object YTPlayerUtils {
     private val MAIN_CLIENT: YouTubeClient = WEB_REMIX
     /**
      * Clients used for fallback streams in case the streams of the main client do not work.
+     * TVHTML5 & IOS are prioritized to bypass NewPipe extractor failing due to "Unexpected M" obfuscation.
      */
     private val STREAM_FALLBACK_CLIENTS: Array<YouTubeClient> = arrayOf(
-        ANDROID_VR_NO_AUTH,
-        MOBILE,
         TVHTML5_SIMPLY_EMBEDDED_PLAYER,
         IOS,
+        ANDROID_VR_NO_AUTH,
+        MOBILE,
         WEB,
         WEB_CREATOR
     )
@@ -291,19 +292,22 @@ object YTPlayerUtils {
             .getOrNull()
     }
     /**
-     * Wrapper around the [NewPipeUtils.getStreamUrl] function which reports exceptions
+     * Wrapper around the [NewPipeUtils.getStreamUrl] function which bypasses exception failures
+     * and guarantees raw playback fallback whenever YouTube breaks decoding.
      */
     private fun findUrlOrNull(
         format: PlayerResponse.StreamingData.Format,
         videoId: String
     ): String? {
         Timber.tag(logTag).d("Finding stream URL for format: ${format.mimeType}, videoId: $videoId")
-        return NewPipeUtils.getStreamUrl(format, videoId)
-            .onSuccess { Timber.tag(logTag).d("Stream URL obtained successfully") }
+        
+        val newPipeUrl = NewPipeUtils.getStreamUrl(format, videoId)
+            .onSuccess { Timber.tag(logTag).d("Stream URL obtained successfully via NewPipe") }
             .onFailure {
-                Timber.tag(logTag).e(it, "Failed to get stream URL")
-                reportException(it)
+                Timber.tag(logTag).e(it, "Failed to get stream URL via NewPipe. Falling back to raw format URLs.")
             }
             .getOrNull()
+            
+        return newPipeUrl ?: format.url ?: com.cgens67.innertube.utils.createUrl(format.url, format.signatureCipher)
     }
 }
