@@ -1338,7 +1338,7 @@ class MusicService :
             try {
                 val enableVideo = runBlocking { dataStore.get(com.cgens67.avidtune.constants.EnableVideoPlaybackKey, true) }
                 val videoQualityStr = runBlocking { dataStore.get(com.cgens67.avidtune.constants.VideoQualityKey, com.cgens67.avidtune.constants.VideoQuality.P1080.name) }
-                val videoQuality = com.cgens67.avidtune.extensions.toEnum(videoQualityStr, com.cgens67.avidtune.constants.VideoQuality.P1080)
+                val videoQuality = videoQualityStr.toEnum(com.cgens67.avidtune.constants.VideoQuality.P1080)
 
                 val playbackData = runBlocking(Dispatchers.IO) {
                     YTPlayerUtils.playerResponseForPlayback(
