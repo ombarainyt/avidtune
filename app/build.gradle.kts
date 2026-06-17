@@ -16,7 +16,7 @@ android {
     compileSdk = 35
 
     defaultConfig {
-        applicationId = "com.cgens67.avidtune"
+        applicationId = "com.cgens67.avidtune.videotest"
         minSdk = 24
         targetSdk = 35
         versionCode = 4
