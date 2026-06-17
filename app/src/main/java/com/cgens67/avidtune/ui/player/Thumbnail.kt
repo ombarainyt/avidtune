@@ -73,6 +73,17 @@ fun Thumbnail(
     val canSkipPrevious by playerConnection.canSkipPrevious.collectAsState()
     val canSkipNext by playerConnection.canSkipNext.collectAsState()
 
+    val enableVideoPlayback by rememberPreference(EnableVideoPlaybackKey, true)
+    val videoResizeModePref by rememberEnumPreference(VideoResizeModeKey, VideoResizeMode.ZOOM)
+
+    val resizeModeInt = remember(videoResizeModePref) {
+        when (videoResizeModePref) {
+            VideoResizeMode.FIT -> AspectRatioFrameLayout.RESIZE_MODE_FIT
+            VideoResizeMode.FILL -> AspectRatioFrameLayout.RESIZE_MODE_FILL
+            VideoResizeMode.ZOOM -> AspectRatioFrameLayout.RESIZE_MODE_ZOOM
+        }
+    }
+
     val playerBackground by rememberEnumPreference(
         key = PlayerBackgroundStyleKey,
         defaultValue = PlayerBackgroundStyle.DEFAULT
@@ -222,12 +233,12 @@ fun Thumbnail(
                                             .size(size)
                                             .clip(RoundedCornerShape(thumbnailCornerRadius.dp * 2))
                                     ) {
-                                        if (isCurrentItem) {
+                                        if (isCurrentItem && enableVideoPlayback) {
                                             AndroidView(
                                                 factory = { ctx ->
                                                     PlayerView(ctx).apply {
                                                         useController = false
-                                                        resizeMode = AspectRatioFrameLayout.RESIZE_MODE_ZOOM
+                                                        resizeMode = resizeModeInt
                                                         setShowBuffering(PlayerView.SHOW_BUFFERING_NEVER)
                                                         setShutterBackgroundColor(android.graphics.Color.TRANSPARENT)
                                                         isClickable = false
@@ -236,6 +247,7 @@ fun Thumbnail(
                                                     }
                                                 },
                                                 update = { view ->
+                                                    view.resizeMode = resizeModeInt
                                                     view.player = playerConnection.player
                                                 },
                                                 modifier = Modifier.fillMaxSize()
@@ -272,12 +284,12 @@ fun Thumbnail(
                                             }
                                         )
 
-                                        if (isCurrentItem) {
+                                        if (isCurrentItem && enableVideoPlayback) {
                                             AndroidView(
                                                 factory = { ctx ->
                                                     PlayerView(ctx).apply {
                                                         useController = false
-                                                        resizeMode = AspectRatioFrameLayout.RESIZE_MODE_ZOOM
+                                                        resizeMode = resizeModeInt
                                                         setShowBuffering(PlayerView.SHOW_BUFFERING_NEVER)
                                                         setShutterBackgroundColor(android.graphics.Color.TRANSPARENT)
                                                         isClickable = false
@@ -286,6 +298,7 @@ fun Thumbnail(
                                                     }
                                                 },
                                                 update = { view ->
+                                                    view.resizeMode = resizeModeInt
                                                     view.player = playerConnection.player
                                                 },
                                                 modifier = Modifier.fillMaxSize()
