@@ -15,12 +15,17 @@ import androidx.media3.exoplayer.offline.DownloadNotificationHelper
 import com.cgens67.innertube.YouTube
 import com.cgens67.avidtune.constants.AudioQuality
 import com.cgens67.avidtune.constants.AudioQualityKey
+import com.cgens67.avidtune.constants.EnableVideoPlaybackKey
+import com.cgens67.avidtune.constants.VideoQualityKey
 import com.cgens67.avidtune.db.MusicDatabase
 import com.cgens67.avidtune.db.entities.FormatEntity
 import com.cgens67.avidtune.di.DownloadCache
 import com.cgens67.avidtune.di.PlayerCache
 import com.cgens67.avidtune.utils.YTPlayerUtils
+import com.cgens67.avidtune.utils.dataStore
 import com.cgens67.avidtune.utils.enumPreference
+import com.cgens67.avidtune.extensions.toEnum
+import com.cgens67.avidtune.utils.get
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
@@ -72,11 +77,17 @@ constructor(
                 return@Factory dataSpec.withUri(it.first.toUri())
             }
 
+            val enableVideo = runBlocking { context.dataStore.get(EnableVideoPlaybackKey, true) }
+            val videoQualityStr = runBlocking { context.dataStore.get(VideoQualityKey, com.cgens67.avidtune.constants.VideoQuality.P1080.name) }
+            val videoQuality = videoQualityStr.toEnum(com.cgens67.avidtune.constants.VideoQuality.P1080)
+
             val playedFormat = runBlocking(Dispatchers.IO) { database.format(mediaId).first() }
             val playbackData = runBlocking(Dispatchers.IO) {
                 YTPlayerUtils.playerResponseForPlayback(
                     mediaId,
                     audioQuality = audioQuality,
+                    videoQuality = videoQuality,
+                    enableVideo = enableVideo,
                     connectivityManager = connectivityManager,
                 )
             }.getOrThrow()
