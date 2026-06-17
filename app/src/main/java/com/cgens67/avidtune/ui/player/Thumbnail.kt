@@ -1,5 +1,7 @@
 package com.cgens67.avidtune.ui.player
 
+import android.view.TextureView
+import android.view.ViewGroup
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -33,8 +35,11 @@ import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.util.fastForEach
+import androidx.compose.ui.viewinterop.AndroidView
 import androidx.media3.common.C
 import androidx.media3.common.Player
+import androidx.media3.ui.AspectRatioFrameLayout
+import androidx.media3.ui.PlayerView
 import coil.compose.AsyncImage
 import coil.compose.SubcomposeAsyncImage
 import coil.request.CachePolicy
@@ -189,6 +194,8 @@ fun Thumbnail(
                         modifier = Modifier.fillMaxSize()
                     ) {
                         items(mediaItems) { item ->
+                            val isCurrentItem = item == currentMediaItem
+
                             Box(
                                 modifier = Modifier
                                     .width(maxWidth)
@@ -209,8 +216,32 @@ fun Thumbnail(
                             ) {
 
                                 if (isAppleMusicStyle) {
-                                    // CARÁTULA OCULTA
-                                    Box(modifier = Modifier.size(size))
+                                    // CARÁTULA OCULTA O VIDEO
+                                    Box(
+                                        modifier = Modifier
+                                            .size(size)
+                                            .clip(RoundedCornerShape(thumbnailCornerRadius.dp * 2))
+                                    ) {
+                                        if (isCurrentItem) {
+                                            AndroidView(
+                                                factory = { ctx ->
+                                                    PlayerView(ctx).apply {
+                                                        useController = false
+                                                        resizeMode = AspectRatioFrameLayout.RESIZE_MODE_ZOOM
+                                                        setShowBuffering(PlayerView.SHOW_BUFFERING_NEVER)
+                                                        setShutterBackgroundColor(android.graphics.Color.TRANSPARENT)
+                                                        isClickable = false
+                                                        isFocusable = false
+                                                        player = playerConnection.player
+                                                    }
+                                                },
+                                                update = { view ->
+                                                    view.player = playerConnection.player
+                                                },
+                                                modifier = Modifier.fillMaxSize()
+                                            )
+                                        }
+                                    }
                                 } else {
                                     Box(
                                         modifier = Modifier
@@ -240,6 +271,26 @@ fun Thumbnail(
                                                 }
                                             }
                                         )
+
+                                        if (isCurrentItem) {
+                                            AndroidView(
+                                                factory = { ctx ->
+                                                    PlayerView(ctx).apply {
+                                                        useController = false
+                                                        resizeMode = AspectRatioFrameLayout.RESIZE_MODE_ZOOM
+                                                        setShowBuffering(PlayerView.SHOW_BUFFERING_NEVER)
+                                                        setShutterBackgroundColor(android.graphics.Color.TRANSPARENT)
+                                                        isClickable = false
+                                                        isFocusable = false
+                                                        player = playerConnection.player
+                                                    }
+                                                },
+                                                update = { view ->
+                                                    view.player = playerConnection.player
+                                                },
+                                                modifier = Modifier.fillMaxSize()
+                                            )
+                                        }
                                     }
                                 }
                             }
