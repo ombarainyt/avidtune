@@ -80,7 +80,10 @@ constructor(
                     connectivityManager = connectivityManager,
                 )
             }.getOrThrow()
+            
             val format = playbackData.format
+            val mimeTypeParts = format.mimeType.split("codecs=")
+            val codecs = if (mimeTypeParts.size > 1) mimeTypeParts[1].removeSurrounding("\"") else ""
 
             database.query {
                 upsert(
@@ -88,10 +91,10 @@ constructor(
                         id = mediaId,
                         itag = format.itag,
                         mimeType = format.mimeType.split(";")[0],
-                        codecs = format.mimeType.split("codecs=")[1].removeSurrounding("\""),
+                        codecs = codecs,
                         bitrate = format.bitrate,
                         sampleRate = format.audioSampleRate,
-                        contentLength = format.contentLength!!,
+                        contentLength = format.contentLength ?: 0L,
                         loudnessDb = playbackData.audioConfig?.loudnessDb,
                         playbackUrl = playbackData.streamUrl
                     ),
