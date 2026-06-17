@@ -236,9 +236,9 @@ object YTPlayerUtils {
     ): PlayerResponse.StreamingData.Format? {
         Timber.tag(logTag).d("Finding format with audioQuality: $audioQuality, network metered: ${connectivityManager.isActiveNetworkMetered}")
 
-        // Prioritize muxed formats to allow for video playback
+        // Prioritize muxed formats to allow for video playback (limit height up to 1080 to prevent MediaCodec OutOfMemory crashes on some devices)
         val videoFormat = playerResponse.streamingData?.formats
-            ?.filter { it.width != null }
+            ?.filter { it.width != null && (it.height ?: 0) <= 1080 }
             ?.maxByOrNull { it.height ?: 0 }
 
         if (videoFormat != null) {
