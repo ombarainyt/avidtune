@@ -100,6 +100,7 @@ import com.cgens67.avidtune.extensions.currentMetadata
 import com.cgens67.avidtune.extensions.findNextMediaItemById
 import com.cgens67.avidtune.extensions.mediaItems
 import com.cgens67.avidtune.extensions.metadata
+import com.cgens67.avidtune.extensions.toEnum
 import com.cgens67.avidtune.extensions.toMediaItem
 import com.cgens67.avidtune.extensions.toQueue
 import com.cgens67.avidtune.lyrics.LyricsHelper
@@ -1335,10 +1336,16 @@ class MusicService :
             // Intentar YouTube primero (fuente principal)
             val ytLogTag = "YouTube"
             try {
+                val enableVideo = runBlocking { dataStore.get(com.cgens67.avidtune.constants.EnableVideoPlaybackKey, true) }
+                val videoQualityStr = runBlocking { dataStore.get(com.cgens67.avidtune.constants.VideoQualityKey, com.cgens67.avidtune.constants.VideoQuality.P1080.name) }
+                val videoQuality = com.cgens67.avidtune.extensions.toEnum(videoQualityStr, com.cgens67.avidtune.constants.VideoQuality.P1080)
+
                 val playbackData = runBlocking(Dispatchers.IO) {
                     YTPlayerUtils.playerResponseForPlayback(
                         mediaId,
                         audioQuality = audioQuality,
+                        videoQuality = videoQuality,
+                        enableVideo = enableVideo,
                         connectivityManager = connectivityManager,
                     )
                 }.getOrElse { throwable ->
@@ -1390,7 +1397,10 @@ class MusicService :
                 }
                 scope.launch(Dispatchers.IO) { recoverSong(mediaId, playbackData) }
 
-                val streamUrl = playbackData.streamUrl
+                val streamUrl = playbackData.streamUrl.let {
+                    // Specify range to avoid YouTube's throttling
+                    "${it}&range=0-${format.contentLength ?: 10000000}"
+                }
 
                 songUrlCache[mediaId] =
                     streamUrl to System.currentTimeMillis() + (playbackData.streamExpiresInSeconds * 1000L)
