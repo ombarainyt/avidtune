@@ -22,6 +22,28 @@ val SlimNavBarKey = booleanPreferencesKey("slimNavBar")
 val GridItemsSizeKey = stringPreferencesKey("gridItemSize")
 val SliderStyleKey = stringPreferencesKey("sliderStyle")
 
+val EnableVideoPlaybackKey = booleanPreferencesKey("enableVideoPlayback")
+val VideoQualityKey = stringPreferencesKey("videoQuality")
+val VideoResizeModeKey = stringPreferencesKey("videoResizeMode")
+
+enum class VideoQuality(val height: Int) {
+    P144(144),
+    P240(240),
+    P360(360),
+    P480(480),
+    P720(720),
+    P1080(1080),
+    P1440(1440),
+    P2160(2160),
+    MAX(Int.MAX_VALUE)
+}
+
+enum class VideoResizeMode {
+    FIT,
+    FILL,
+    ZOOM
+}
+
 enum class SliderStyle {
     DEFAULT,
     SQUIGGLY,
@@ -117,11 +139,9 @@ val SongFilterKey = stringPreferencesKey("songFilter")
 val ArtistFilterKey = stringPreferencesKey("artistFilter")
 val AlbumFilterKey = stringPreferencesKey("albumFilter")
 
-
 val LyricsScrollKey = booleanPreferencesKey("lyricsScrollKey")
 
 val DiscordUseDetailsKey = booleanPreferencesKey("discordUseDetails")
-
 
 val AppleMusicLyricsBlurKey = booleanPreferencesKey("apple_music_lyrics_blur")
 
@@ -139,12 +159,12 @@ val LyricFontSizeKey = intPreferencesKey("lyricFontSize")
 val fullScreenLyricsKey = booleanPreferencesKey("fullScreenLyrics")
 val AnimateLyricsKey = booleanPreferencesKey("animate_lyrics")
 
-
 val PlayPauseButtonShapeKey = stringPreferencesKey("playPauseButtonShape")
 const val DefaultPlayPauseButtonShape = "Cookie9Sided"
 
 val MiniPlayerThumbnailShapeKey = stringPreferencesKey("miniPlayerThumbnailShape")
 const val DefaultMiniPlayerThumbnailShape = "Circle"
+
 enum class LibraryViewType {
     LIST,
     GRID,
@@ -295,16 +315,11 @@ enum class PlayerBackgroundStyle {
     APPLE_MUSIC,
 }
 
-
 enum class PlayerButtonsStyle {
     DEFAULT,
     PRIMARY,
     TERTIARY
 }
-
-
-
-
 
 val TopSize = stringPreferencesKey("topSize")
 val HistoryDuration = floatPreferencesKey("historyDuration")
