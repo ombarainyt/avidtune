@@ -236,6 +236,16 @@ object YTPlayerUtils {
     ): PlayerResponse.StreamingData.Format? {
         Timber.tag(logTag).d("Finding format with audioQuality: $audioQuality, network metered: ${connectivityManager.isActiveNetworkMetered}")
 
+        // Prioritize muxed formats to allow for video playback
+        val videoFormat = playerResponse.streamingData?.formats
+            ?.filter { it.width != null }
+            ?.maxByOrNull { it.height ?: 0 }
+
+        if (videoFormat != null) {
+            Timber.tag(logTag).d("Selected video format: ${videoFormat.mimeType}, bitrate: ${videoFormat.bitrate}")
+            return videoFormat
+        }
+
         val format = playerResponse.streamingData?.adaptiveFormats
             ?.filter { it.isAudio }
             ?.maxByOrNull {
@@ -247,7 +257,7 @@ object YTPlayerUtils {
             }
 
         if (format != null) {
-            Timber.tag(logTag).d("Selected format: ${format.mimeType}, bitrate: ${format.bitrate}")
+            Timber.tag(logTag).d("Selected audio format: ${format.mimeType}, bitrate: ${format.bitrate}")
         } else {
             Timber.tag(logTag).d("No suitable audio format found")
         }
