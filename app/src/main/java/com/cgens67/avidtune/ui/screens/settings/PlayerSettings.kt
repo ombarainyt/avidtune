@@ -36,7 +36,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarScrollBehavior
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -45,12 +44,10 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
@@ -69,17 +66,20 @@ import com.cgens67.avidtune.constants.AudioNormalizationKey
 import com.cgens67.avidtune.constants.AudioQuality
 import com.cgens67.avidtune.constants.AudioQualityKey
 import com.cgens67.avidtune.constants.AutoSkipNextOnErrorKey
+import com.cgens67.avidtune.constants.EnableVideoPlaybackKey
 import com.cgens67.avidtune.constants.PersistentQueueKey
 import com.cgens67.avidtune.constants.SkipSilenceKey
 import com.cgens67.avidtune.constants.SponsorBlockEnabledKey
 import com.cgens67.avidtune.constants.StopMusicOnTaskClearKey
+import com.cgens67.avidtune.constants.VideoQuality
+import com.cgens67.avidtune.constants.VideoQualityKey
+import com.cgens67.avidtune.constants.VideoResizeMode
+import com.cgens67.avidtune.constants.VideoResizeModeKey
 import com.cgens67.avidtune.playback.PlayerConnection
 import com.cgens67.avidtune.ui.component.EnumListPreference
-import com.cgens67.avidtune.ui.component.IconButton
 import com.cgens67.avidtune.ui.component.SettingsGeneralCategory
 import com.cgens67.avidtune.ui.component.SettingsPage
 import com.cgens67.avidtune.ui.component.SwitchPreference
-import com.cgens67.avidtune.ui.utils.backToMain
 import com.cgens67.avidtune.utils.rememberEnumPreference
 import com.cgens67.avidtune.utils.rememberPreference
 import kotlinx.coroutines.delay
@@ -119,6 +119,19 @@ fun PlayerSettings(
     val (stopMusicOnTaskClear, onStopMusicOnTaskClearChange) = rememberPreference(
         StopMusicOnTaskClearKey,
         defaultValue = false
+    )
+
+    val (enableVideoPlayback, onEnableVideoPlaybackChange) = rememberPreference(
+        EnableVideoPlaybackKey,
+        defaultValue = true
+    )
+    val (videoQuality, onVideoQualityChange) = rememberEnumPreference(
+        VideoQualityKey,
+        defaultValue = VideoQuality.P1080
+    )
+    val (videoResizeMode, onVideoResizeModeChange) = rememberEnumPreference(
+        VideoResizeModeKey,
+        defaultValue = VideoResizeMode.ZOOM
     )
 
     val (showNerdStats, onShowNerdStatsChange) = rememberPreference(
@@ -171,6 +184,54 @@ fun PlayerSettings(
                     checked = audioNormalization,
                     onCheckedChange = onAudioNormalizationChange
                 )},
+            )
+        )
+
+        SettingsGeneralCategory(
+            title = "Video Playback",
+            items = listOf(
+                {SwitchPreference(
+                    title = { Text("Enable Video Playback") },
+                    icon = { Icon(painterResource(R.drawable.play), null) },
+                    checked = enableVideoPlayback,
+                    onCheckedChange = onEnableVideoPlaybackChange
+                )},
+                {AnimatedVisibility(visible = enableVideoPlayback) {
+                    Column {
+                        EnumListPreference(
+                            title = { Text("Video Quality") },
+                            icon = { Icon(painterResource(R.drawable.graphic_eq), null) },
+                            selectedValue = videoQuality,
+                            onValueSelected = onVideoQualityChange,
+                            valueText = {
+                                when (it) {
+                                    VideoQuality.P144 -> "144p"
+                                    VideoQuality.P240 -> "240p"
+                                    VideoQuality.P360 -> "360p"
+                                    VideoQuality.P480 -> "480p"
+                                    VideoQuality.P720 -> "720p"
+                                    VideoQuality.P1080 -> "1080p"
+                                    VideoQuality.P1440 -> "1440p"
+                                    VideoQuality.P2160 -> "4K (2160p)"
+                                    VideoQuality.MAX -> "Maximum available"
+                                }
+                            }
+                        )
+                        EnumListPreference(
+                            title = { Text("Aspect Ratio (Resize Mode)") },
+                            icon = { Icon(painterResource(R.drawable.image), null) },
+                            selectedValue = videoResizeMode,
+                            onValueSelected = onVideoResizeModeChange,
+                            valueText = {
+                                when (it) {
+                                    VideoResizeMode.FIT -> "Fit (Maintain original aspect ratio)"
+                                    VideoResizeMode.FILL -> "Fill (Stretch to fill)"
+                                    VideoResizeMode.ZOOM -> "Zoom (Crop to fill)"
+                                }
+                            }
+                        )
+                    }
+                }}
             )
         )
 
