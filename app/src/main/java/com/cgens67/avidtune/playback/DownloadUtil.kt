@@ -13,6 +13,7 @@ import androidx.media3.exoplayer.offline.Download
 import androidx.media3.exoplayer.offline.DownloadManager
 import androidx.media3.exoplayer.offline.DownloadNotificationHelper
 import com.cgens67.innertube.YouTube
+import com.cgens67.innertube.models.YouTubeClient
 import com.cgens67.avidtune.constants.AudioQuality
 import com.cgens67.avidtune.constants.AudioQualityKey
 import com.cgens67.avidtune.constants.EnableVideoPlaybackKey
@@ -63,7 +64,7 @@ constructor(
                             .Builder()
                             .proxy(YouTube.proxy)
                             .build(),
-                    ),
+                    ).setUserAgent(YouTubeClient.USER_AGENT_WEB),
                 ),
         ) { dataSpec ->
             val mediaId = dataSpec.key ?: error("No media id")
