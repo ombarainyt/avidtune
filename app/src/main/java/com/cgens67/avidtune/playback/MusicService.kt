@@ -62,6 +62,7 @@ import androidx.media3.session.SessionToken
 import com.cgens67.innertube.YouTube
 import com.cgens67.innertube.models.SongItem
 import com.cgens67.innertube.models.WatchEndpoint
+import com.cgens67.innertube.models.YouTubeClient
 import com.cgens67.jossredconnect.JossRedClient
 import com.cgens67.avidtune.MainActivity
 import com.cgens67.avidtune.R
@@ -1306,7 +1307,7 @@ class MusicService :
                                     .Builder()
                                     .proxy(YouTube.proxy)
                                     .build(),
-                            ),
+                            ).setUserAgent(YouTubeClient.USER_AGENT_WEB),
                         ),
                     ),
             ).setCacheWriteDataSinkFactory(null)
