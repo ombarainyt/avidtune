@@ -93,7 +93,9 @@ object YTPlayerUtils {
 
                 if (format != null) {
                     val streamUrl = findUrlOrNull(format, videoId)
-                    if (streamUrl != null && validateStatus(streamUrl)) {
+                    // Bypassed validateStatus(streamUrl) to prevent YouTube 403 HEAD request blocks 
+                    // from discarding valid high-quality streams and falling back to a low-res proxy.
+                    if (streamUrl != null) {
                         if (enableVideo) {
                             val currentBestHeight = bestFormat?.height ?: 0
                             val newHeight = format.height ?: 0
@@ -168,7 +170,7 @@ object YTPlayerUtils {
         if (enableVideo) {
             val videoFormat = playerResponse.streamingData?.formats
                 ?.filter { it.width != null && (it.height ?: 0) <= videoQuality.height }
-                ?.maxByOrNull { it.height ?: 0 }
+                ?.maxByOrNull { (it.height ?: 0) * 100000L + it.bitrate }
 
             if (videoFormat != null) {
                 Timber.tag(logTag).d("Selected video format: ${videoFormat.mimeType}, height: ${videoFormat.height}, bitrate: ${videoFormat.bitrate}")
@@ -196,20 +198,10 @@ object YTPlayerUtils {
     }
 
     private fun validateStatus(url: String): Boolean {
-        Timber.tag(logTag).d("Validating stream URL status")
-        try {
-            val requestBuilder = Request.Builder()
-                .head()
-                .url(url)
-            val response = httpClient.newCall(requestBuilder.build()).execute()
-            val isSuccessful = response.isSuccessful
-            Timber.tag(logTag).d("Stream URL validation result: ${if (isSuccessful) "Success" else "Failed"} (${response.code})")
-            return isSuccessful
-        } catch (e: Exception) {
-            Timber.tag(logTag).e(e, "Stream URL validation failed with exception")
-            reportException(e)
-        }
-        return false
+        // Obsolete/unused but kept for compatibility if referenced elsewhere.
+        // YouTube blocks HEAD requests to googlevideo.com which was causing valid high-quality
+        // streams to be discarded and falling back to low quality proxies.
+        return true
     }
 
     private fun getSignatureTimestampOrNull(
