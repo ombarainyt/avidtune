@@ -27,7 +27,7 @@ object YTPlayerUtils {
 
     private val MAIN_CLIENT: YouTubeClient = WEB_REMIX
 
-    // Reordered to prioritize clients that reliably return HLS/DASH manifests for 1080p+ streaming
+    // Prioritize clients that reliably return HLS manifests for 1080p+ adaptive streaming
     private val STREAM_FALLBACK_CLIENTS: Array<YouTubeClient> = arrayOf(
         IOS,
         TVHTML5_SIMPLY_EMBEDDED_PLAYER,
@@ -98,25 +98,23 @@ object YTPlayerUtils {
 
             if (streamPlayerResponse?.playabilityStatus?.status == "OK") {
                 val hlsUrl = streamPlayerResponse.streamingData?.hlsManifestUrl
-                val dashUrl = streamPlayerResponse.streamingData?.dashManifestUrl
-
-                // Priority 1: Adaptive Manifests for Video (HLS/DASH)
-                if (enableVideo && (hlsUrl != null || dashUrl != null)) {
-                    val manifestUrl = hlsUrl ?: dashUrl!!
-                    val manifestMimeType = if (hlsUrl != null) "application/x-mpegURL" else "application/dash+xml"
+                
+                // 1. Adaptive Stream Priority (Unlocks 1080p, 1440p, 4K)
+                if (enableVideo && hlsUrl != null) {
+                    val manifestUrl = "$hlsUrl#.m3u8" // Forces ExoPlayer to use HLS Extractor
                     
                     val dummyFormat = PlayerResponse.StreamingData.Format(
                         itag = 0,
                         url = manifestUrl,
-                        mimeType = manifestMimeType,
-                        bitrate = 0,
-                        width = videoQuality.height * 16 / 9, // Fake high width to ensure it's picked
-                        height = videoQuality.height, // Fake high height to ensure it's picked
+                        mimeType = "application/x-mpegURL",
+                        bitrate = 5000000,
+                        width = videoQuality.height * 16 / 9,
+                        height = videoQuality.height,
                         contentLength = 0L,
                         quality = "hd1080",
                         fps = 60,
                         qualityLabel = "${videoQuality.height}p",
-                        averageBitrate = 0,
+                        averageBitrate = 5000000,
                         audioQuality = null,
                         approxDurationMs = null,
                         audioSampleRate = null,
@@ -133,11 +131,10 @@ object YTPlayerUtils {
                     bestVideoDetails = streamPlayerResponse.videoDetails
                     bestPlaybackTracking = streamPlayerResponse.playbackTracking
                     
-                    // We hit the jackpot for video. Break!
-                    break
+                    break // Stop searching once we find a valid HLS stream
                 }
 
-                // Priority 2: Standard/Progressive stream fallback
+                // 2. Progressive stream fallback
                 val format = findFormat(streamPlayerResponse, audioQuality, videoQuality, enableVideo, connectivityManager)
                 if (format != null) {
                     val streamUrl = findUrlOrNull(format, videoId)
@@ -154,10 +151,9 @@ object YTPlayerUtils {
                             bestPlaybackTracking = streamPlayerResponse.playbackTracking
                         }
 
+                        // If video is disabled, we got our audio stream. Break.
                         if (!enableVideo) {
-                            break // Found audio stream, we're good
-                        } else if ((format.height ?: 0) >= videoQuality.height && format.mimeType.contains("mp4")) {
-                            break // Found video stream matching quality, we're good
+                            break 
                         }
                     }
                 }
