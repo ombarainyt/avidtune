@@ -46,6 +46,14 @@ object YTPlayerUtils {
         val streamExpiresInSeconds: Int,
     )
 
+    private fun getFormatScore(format: PlayerResponse.StreamingData.Format?): Long {
+        if (format == null) return -1L
+        val height = format.height ?: 0
+        val isMp4 = if (format.mimeType.contains("mp4")) 1L else 0L
+        // Score logic: Resolution is king (10B mult), then MP4 container (1B mult), then raw bitrate
+        return height * 10000000000L + isMp4 * 1000000000L + format.bitrate
+    }
+
     suspend fun playerResponseForPlayback(
         videoId: String,
         playlistId: String? = null,
@@ -97,9 +105,10 @@ object YTPlayerUtils {
                     // from discarding valid high-quality streams and falling back to a low-res proxy.
                     if (streamUrl != null) {
                         if (enableVideo) {
-                            val currentBestHeight = bestFormat?.height ?: 0
-                            val newHeight = format.height ?: 0
-                            if (newHeight >= currentBestHeight) {
+                            val currentScore = getFormatScore(bestFormat)
+                            val newScore = getFormatScore(format)
+                            
+                            if (newScore > currentScore) {
                                 bestFormat = format
                                 bestStreamUrl = streamUrl
                                 bestStreamExpiresInSeconds = streamPlayerResponse.streamingData?.expiresInSeconds
@@ -108,7 +117,9 @@ object YTPlayerUtils {
                                 bestPlaybackTracking = streamPlayerResponse.playbackTracking
                             }
 
-                            if (newHeight >= videoQuality.height) {
+                            val newHeight = format.height ?: 0
+                            // Break early only if we met the requested resolution and it's a high-quality container
+                            if (newHeight >= videoQuality.height && format.mimeType.contains("mp4")) {
                                 break
                             }
                         } else {
@@ -170,7 +181,10 @@ object YTPlayerUtils {
         if (enableVideo) {
             val videoFormat = playerResponse.streamingData?.formats
                 ?.filter { it.width != null && (it.height ?: 0) <= videoQuality.height }
-                ?.maxByOrNull { (it.height ?: 0) * 100000L + it.bitrate }
+                ?.maxByOrNull { 
+                    val isMp4 = if (it.mimeType.contains("mp4")) 1L else 0L
+                    (it.height ?: 0) * 10000000000L + isMp4 * 1000000000L + it.bitrate 
+                }
 
             if (videoFormat != null) {
                 Timber.tag(logTag).d("Selected video format: ${videoFormat.mimeType}, height: ${videoFormat.height}, bitrate: ${videoFormat.bitrate}")
