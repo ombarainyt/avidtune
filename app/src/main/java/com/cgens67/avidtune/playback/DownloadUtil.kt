@@ -16,7 +16,6 @@ import com.cgens67.innertube.YouTube
 import com.cgens67.innertube.models.YouTubeClient
 import com.cgens67.avidtune.constants.AudioQuality
 import com.cgens67.avidtune.constants.AudioQualityKey
-import com.cgens67.avidtune.constants.EnableVideoPlaybackKey
 import com.cgens67.avidtune.constants.VideoQualityKey
 import com.cgens67.avidtune.db.MusicDatabase
 import com.cgens67.avidtune.db.entities.FormatEntity
@@ -78,7 +77,9 @@ constructor(
                 return@Factory dataSpec.withUri(it.first.toUri())
             }
 
-            val enableVideo = runBlocking { context.dataStore.get(EnableVideoPlaybackKey, true) }
+            // Force audio-only for downloads (enableVideo = false) to prevent the HLS manifest text file
+            // from being mistakenly cached and downloaded as a progressive file rather than its segments.
+            val enableVideo = false 
             val videoQualityStr = runBlocking { context.dataStore.get(VideoQualityKey, com.cgens67.avidtune.constants.VideoQuality.P1080.name) }
             val videoQuality = videoQualityStr.toEnum(com.cgens67.avidtune.constants.VideoQuality.P1080)
 
