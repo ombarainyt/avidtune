@@ -87,6 +87,7 @@ import com.cgens67.avidtune.constants.ShowLyricsKey
 import com.cgens67.avidtune.constants.SimilarContent
 import com.cgens67.avidtune.constants.SkipSilenceKey
 import com.cgens67.avidtune.constants.SponsorBlockEnabledKey
+import com.cgens67.avidtune.constants.VideoQualityKey
 import com.cgens67.avidtune.db.MusicDatabase
 import com.cgens67.avidtune.db.entities.Event
 import com.cgens67.avidtune.db.entities.FormatEntity
@@ -287,6 +288,20 @@ class MusicService :
                     addListener(sleepTimer)
                     addAnalyticsListener(PlaybackStatsListener(false, this@MusicService))
                 }
+
+        // Dynamically cap video resolution for adaptive streams (like HLS)
+        dataStore.data
+            .map { it[VideoQualityKey] ?: com.cgens67.avidtune.constants.VideoQuality.P1080.name }
+            .distinctUntilChanged()
+            .collectLatest(scope) { qualityStr ->
+                val quality = qualityStr.toEnum(com.cgens67.avidtune.constants.VideoQuality.P1080)
+                val maxHeight = quality.height
+                val maxWidth = if (maxHeight == Int.MAX_VALUE) Int.MAX_VALUE else maxHeight * 21 / 9
+                player.trackSelectionParameters = player.trackSelectionParameters
+                    .buildUpon()
+                    .setMaxVideoSize(maxWidth, maxHeight)
+                    .build()
+            }
 
         audioManager = getSystemService(Context.AUDIO_SERVICE) as AudioManager
         setupAudioFocusRequest()
