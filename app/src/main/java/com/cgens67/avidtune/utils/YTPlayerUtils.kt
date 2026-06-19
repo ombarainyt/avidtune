@@ -16,7 +16,6 @@ import com.cgens67.innertube.models.YouTubeClient.Companion.WEB
 import com.cgens67.innertube.models.YouTubeClient.Companion.WEB_CREATOR
 import com.cgens67.innertube.models.YouTubeClient.Companion.WEB_REMIX
 import okhttp3.OkHttpClient
-import okhttp3.Request
 import timber.log.Timber
 
 object YTPlayerUtils {
@@ -28,11 +27,12 @@ object YTPlayerUtils {
 
     private val MAIN_CLIENT: YouTubeClient = WEB_REMIX
 
+    // Reordered to prioritize clients that reliably return HLS/DASH manifests for 1080p+ streaming
     private val STREAM_FALLBACK_CLIENTS: Array<YouTubeClient> = arrayOf(
+        IOS,
+        TVHTML5_SIMPLY_EMBEDDED_PLAYER,
         ANDROID_VR_NO_AUTH,
         MOBILE,
-        TVHTML5_SIMPLY_EMBEDDED_PLAYER,
-        IOS,
         WEB,
         WEB_CREATOR
     )
@@ -97,38 +97,89 @@ object YTPlayerUtils {
             val streamPlayerResponse = if (clientIndex == -1) mainPlayerResponse else YouTube.player(videoId, playlistId, client, signatureTimestamp).getOrNull()
 
             if (streamPlayerResponse?.playabilityStatus?.status == "OK") {
+                val hlsUrl = streamPlayerResponse.streamingData?.hlsManifestUrl
+                val dashUrl = streamPlayerResponse.streamingData?.dashManifestUrl
+
                 val format = findFormat(streamPlayerResponse, audioQuality, videoQuality, enableVideo, connectivityManager)
 
+                // If video is enabled, prioritize adaptive streaming (HLS/DASH manifests) for 1080p+ support
+                if (enableVideo && (hlsUrl != null || dashUrl != null)) {
+                    val manifestUrl = hlsUrl ?: dashUrl!!
+                    val manifestMimeType = if (hlsUrl != null) "application/x-mpegURL" else "application/dash+xml"
+                    
+                    val adaptiveVideoFormat = streamPlayerResponse.streamingData?.adaptiveFormats
+                        ?.filter { it.width != null && (it.height ?: 0) <= videoQuality.height }
+                        ?.maxByOrNull { it.height ?: 0 } ?: format
+
+                    if (adaptiveVideoFormat != null) {
+                        val dummyFormat = PlayerResponse.StreamingData.Format(
+                            itag = adaptiveVideoFormat.itag,
+                            url = manifestUrl,
+                            mimeType = manifestMimeType,
+                            bitrate = adaptiveVideoFormat.bitrate,
+                            width = adaptiveVideoFormat.width,
+                            height = adaptiveVideoFormat.height,
+                            contentLength = adaptiveVideoFormat.contentLength,
+                            quality = adaptiveVideoFormat.quality,
+                            fps = adaptiveVideoFormat.fps,
+                            qualityLabel = adaptiveVideoFormat.qualityLabel,
+                            averageBitrate = adaptiveVideoFormat.averageBitrate,
+                            audioQuality = adaptiveVideoFormat.audioQuality,
+                            approxDurationMs = adaptiveVideoFormat.approxDurationMs,
+                            audioSampleRate = adaptiveVideoFormat.audioSampleRate,
+                            audioChannels = adaptiveVideoFormat.audioChannels,
+                            loudnessDb = adaptiveVideoFormat.loudnessDb,
+                            lastModified = adaptiveVideoFormat.lastModified,
+                            signatureCipher = null
+                        )
+
+                        // Safely handles both raw manifest URL and signature-ciphered equivalents automatically
+                        val streamUrl = NewPipeUtils.getStreamUrl(dummyFormat, videoId).getOrNull() ?: manifestUrl
+                        
+                        val currentScore = getFormatScore(bestFormat)
+                        // Add massive weight to adaptive manifests over raw progressive files
+                        val newScore = getFormatScore(adaptiveVideoFormat) + 100000000000L 
+                        
+                        if (newScore > currentScore) {
+                            bestFormat = dummyFormat
+                            bestStreamUrl = streamUrl
+                            bestStreamExpiresInSeconds = streamPlayerResponse.streamingData?.expiresInSeconds ?: 21600
+                            bestAudioConfig = streamPlayerResponse.playerConfig?.audioConfig
+                            bestVideoDetails = streamPlayerResponse.videoDetails
+                            bestPlaybackTracking = streamPlayerResponse.playbackTracking
+                        }
+
+                        // Target satisfied via adaptive streaming
+                        val newHeight = adaptiveVideoFormat.height ?: 0
+                        if (newHeight >= videoQuality.height || newHeight >= 1080) {
+                            break
+                        }
+                    }
+                }
+
+                // Standard progressive stream fallback logic
                 if (format != null) {
                     val streamUrl = findUrlOrNull(format, videoId)
-                    // Bypassed validateStatus(streamUrl) to prevent YouTube 403 HEAD request blocks 
-                    // from discarding valid high-quality streams and falling back to a low-res proxy.
+                    
                     if (streamUrl != null) {
-                        if (enableVideo) {
-                            val currentScore = getFormatScore(bestFormat)
-                            val newScore = getFormatScore(format)
-                            
-                            if (newScore > currentScore) {
-                                bestFormat = format
-                                bestStreamUrl = streamUrl
-                                bestStreamExpiresInSeconds = streamPlayerResponse.streamingData?.expiresInSeconds
-                                bestAudioConfig = streamPlayerResponse.playerConfig?.audioConfig
-                                bestVideoDetails = streamPlayerResponse.videoDetails
-                                bestPlaybackTracking = streamPlayerResponse.playbackTracking
-                            }
+                        val currentScore = getFormatScore(bestFormat)
+                        val newScore = getFormatScore(format)
+                        
+                        if (newScore > currentScore) {
+                            bestFormat = format
+                            bestStreamUrl = streamUrl
+                            bestStreamExpiresInSeconds = streamPlayerResponse.streamingData?.expiresInSeconds ?: 21600
+                            bestAudioConfig = streamPlayerResponse.playerConfig?.audioConfig
+                            bestVideoDetails = streamPlayerResponse.videoDetails
+                            bestPlaybackTracking = streamPlayerResponse.playbackTracking
+                        }
 
+                        if (enableVideo) {
                             val newHeight = format.height ?: 0
-                            // Break early only if we met the requested resolution and it's a high-quality container
                             if (newHeight >= videoQuality.height && format.mimeType.contains("mp4")) {
                                 break
                             }
                         } else {
-                            bestFormat = format
-                            bestStreamUrl = streamUrl
-                            bestStreamExpiresInSeconds = streamPlayerResponse.streamingData?.expiresInSeconds
-                            bestAudioConfig = streamPlayerResponse.playerConfig?.audioConfig
-                            bestVideoDetails = streamPlayerResponse.videoDetails
-                            bestPlaybackTracking = streamPlayerResponse.playbackTracking
                             break
                         }
                     }
